@@ -1,0 +1,188 @@
+public record AppointmentResponseDTO(
+        String id,
+        String doctorId,
+        String doctorName,
+        String specialization,
+        String patientId,
+        String patientName,
+        LocalDateTime appointmentTime,
+        AppointmentStatus status,
+        String reason,
+        String notes,
+        Instant createdAt,
+        Instant updatedAt
+) {}
+public record DoctorResponseDTO(
+        String id,
+        String email,
+        String fullName,
+        String specialization,
+        String phone,
+        Instant updatedAt
+) {}
+public record PatientResponseDTO(
+        String id,
+        String email,
+        String fullName,
+        Integer age,
+        String gender,
+        String phone,
+        Instant updatedAt
+) {}
+
+public record UserResponseDTO(
+        String id,
+        String email,
+        String displayName,
+        Role role,
+        boolean enabled,
+        Instant createdAt,
+        Instant updatedAt
+) {
+}
+
+
+
+public record AppointmentCreateDTO(
+        @NotBlank(message = "Doctor id is required")
+        String doctorId,
+
+        @NotNull(message = "Appointment time is required")
+        @Future(message = "Appointment time must be in the future")
+        LocalDateTime appointmentTime,
+
+        @Size(max = 500, message = "Reason must be at most 500 characters")
+        String reason
+) {}
+
+public record LoginRequestDTO(
+        @NotBlank(message = "Email is required") @Email String email,
+        @NotBlank(message = "Password is required") String password
+) {}
+
+public record DoctorCreateDTO(
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, max = 20, message = "Password must be 6 to 20 characters")
+        String password,
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotBlank(message = "Specialization is required")
+        @Size(max = 100, message = "Specialization must be at most 100 characters")
+        String specialization,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+public record PatientCreateDTO(
+
+        // ---- User (login) fields ----
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, max = 20, message = "Password must be 6 to 20 characters")
+        String password,
+
+        // ---- Patient profile fields ----
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotNull(message = "Age is required")
+        @Min(value = 0, message = "Age cannot be negative")
+        @Max(value = 130, message = "Age must be realistic")
+        Integer age,
+
+        @NotBlank(message = "Gender is required")
+        @Pattern(regexp = "(?i)MALE|FEMALE|OTHER",
+                message = "Gender must be MALE, FEMALE or OTHER")
+        String gender,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+public record UserCreateDTO(
+        @NotBlank(message = "Email is required")
+        @Email(message = "Invalid email format")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, message = "Password must be at least 6 characters long")
+        String password,
+
+        String displayName,
+
+        @NotNull(message = "Role is required")
+        @Pattern(regexp = "ADMIN|DOCTOR|PATIENT", message = "Role must be either ADMIN or DOCTOR or PATIENT")
+        String role
+) {}
+
+public record AppointmentNotesDTO(
+        @NotBlank(message = "Notes cannot be blank")
+        @Size(max = 1000, message = "Notes must be at most 1000 characters")
+        String notes
+) {}
+
+
+
+public record DoctorUpdateDTO(
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotBlank(message = "Specialization is required")
+        @Size(max = 100, message = "Specialization must be at most 100 characters")
+        String specialization,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+ublic record PatientUpdateDTO(
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+//        @NotNull(message = "Age is required")
+        @Min(value = 0, message = "Age cannot be negative")
+        @Max(value = 130, message = "Age must be realistic")
+        Integer age,
+
+        @NotBlank(message = "Gender is required")
+        @Pattern(regexp = "(?i)MALE|FEMALE|OTHER",
+                message = "Gender must be MALE, FEMALE or OTHER")
+        String gender,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+public record UserUpdateDTO(
+        @Email(message = "Invalid email format")
+        String email,
+
+        @Size(min = 6, message = "Password must be at least 6 characters long")
+        String password,
+
+        String displayName,
+
+        @Pattern(regexp = "ADMIN|DOCTOR|PATIENT", message = "Role must be either ADMIN or DOCTOR or PATIENT")
+        Role role,
+
+        Boolean enabled
+) {}
