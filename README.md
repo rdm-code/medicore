@@ -1,1 +1,1 @@
-# medicore
+# Medicore - Smart Hospital Management
