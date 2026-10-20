@@ -1,38 +1,64 @@
 # MediCore - Smart Hospital Management
 
 ## Purpose
-MediCore is a hospital management system with a Spring Boot REST API backend and a React + Vite frontend. It supports three roles — **ADMIN**, **DOCTOR**, and **PATIENT** — with session-based login, patient self-registration, doctor management, appointment booking, slot availability, and doctor notes. Admins manage users, doctors, patients, and appointments; doctors manage their own appointments and notes; patients book and cancel appointments.
+
+MediCore is a hospital management system with a Spring Boot REST API backend and a React + Vite frontend. It supports three roles — **ADMIN**, **DOCTOR**, and **PATIENT** — with session-based login, patient self-registration, doctor management, appointment booking, slot availability, and doctor notes.
+
+- **Admins** manage users, doctors, patients, and appointments.
+- **Doctors** manage their own appointments and notes.
+- **Patients** book and cancel appointments.
 
 ## Tech Stack
+
 - **Backend:** Java 21, Spring Boot 4.1.1 (Spring Security, Spring Data JPA, Spring Web MVC, Validation, Actuator)
 - **Build Tool:** Maven (use the included `mvnw` wrapper)
 - **Mapping:** MapStruct 1.6.3 + Lombok
-- **Database:** PostgreSQL (also H2 on classpath for local runs)
+- **Database:** PostgreSQL (H2 is also on the classpath for local runs)
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind, SWR for data fetching, Zod for validation
 - **Docs:** springdoc-openapi (Swagger UI)
 
 ## Prerequisites
+
 - JDK 21+
 - Node.js 18+ and npm (for the frontend)
 - PostgreSQL 14+ (or use the H2 fallback)
 - Maven (or use `./mvnw`)
 
 ## Database Setup
+
 1. Create the database:
+
    ```sql
    CREATE DATABASE hospital_management;
+   ```
 
+2. Configure the connection (URL, username, password) in `src/main/resources/application.properties`, or override with environment variables.
+3. For a quick local run without PostgreSQL, use the H2 fallback instead.
+
+## Running Locally
+
+```bash
+# Backend
+./mvnw spring-boot:run
+
+# Frontend (in a separate terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+> The paths and commands above are the standard defaults; adjust them if your project layout differs.
 
 ---
 
-## 2. API Documentation
+# API Documentation
 
-### Endpoint Table (from your controllers)
+## Endpoints
 
 | Method | URL | Description | Request body | Success | Error |
 |---|---|---|---|---|---|
 | POST | `/api/auth/register` | Public patient self-registration | `PatientCreateDTO` | 201 | 400, 409 |
-| POST | `/api/auth/login` | Session login, returns email+role | `LoginRequestDTO` | 200 | 400, 401 |
+| POST | `/api/auth/login` | Session login, returns email + role | `LoginRequestDTO` | 200 | 400, 401 |
 | GET | `/api/auth/me` | Current logged-in user | – | 200 | 401 |
 | POST | `/api/auth/logout` | Ends session (handled by SecurityConfig) | – | 204 | – |
 | GET | `/api/admin/users` | List users | – | 200 | 401, 403 |
@@ -63,22 +89,28 @@ MediCore is a hospital management system with a Spring Boot REST API backend and
 | PATCH | `/api/appointments/{id}/notes` | Doctor adds notes | `AppointmentNotesDTO` | 200 | 400, 403, 404, 409 |
 | DELETE | `/api/appointments/{id}` | Admin delete | – | 204 | 403, 404 |
 
+---
 
 # MediCore Design
 
 ## Problem Statement
+
 Hospitals juggle patients, doctors, and appointments across paper and spreadsheets. MediCore centralizes this in one REST API with role-based access: admins manage accounts and doctors, doctors see and complete their schedule and write notes, patients self-register, view available slots, and book/cancel appointments. The system must prevent double-booking of a doctor's time slot and enforce role permissions on every endpoint.
 
 ## Layered Architecture
 
 ```mermaid
 flowchart LR
-    A[React + Vite<br/>Nginx in prod] -->|HTTPS/JSON<br/>JSESSIONID cookie| B[Controller layer<br/>@RestController]
-    B --> C[Service layer<br/>@Service @Transactional]
-    C --> D[Repository layer<br/>JpaRepository + custom @Query]
-    C -.-> M[MapStruct mappers<br/>DTO ⇄ Entity]
-    D -->|JDBC| E[(PostgreSQL<br/>hospital_management)]```
+    A["React + Vite<br/>Nginx in prod"] -->|"HTTPS/JSON<br/>JSESSIONID cookie"| B["Controller layer<br/>@RestController"]
+    B --> C["Service layer<br/>@Service @Transactional"]
+    C --> D["Repository layer<br/>JpaRepository + custom @Query"]
+    C -.-> M["MapStruct mappers<br/>DTO ⇄ Entity"]
+    D -->|JDBC| E[("PostgreSQL<br/>hospital_management")]
+```
 
+## Entity Relationship Diagram
+
+```mermaid
 erDiagram
     USER ||--o| PATIENT : "profile"
     USER ||--o| DOCTOR  : "profile"
@@ -113,9 +145,9 @@ erDiagram
         Instant updatedAt
     }
     APPOINTMENT {
-        string  id PK
-        string  patientId FK
-        string  doctorId  FK
+        string   id PK
+        string   patientId FK
+        string   doctorId  FK
         datetime appointmentTime
         enum     status "SCHEDULED|COMPLETED|CANCELLED"
         string   reason  "max 500"
@@ -123,3 +155,4 @@ erDiagram
         Instant  createdAt
         Instant  updatedAt
     }
+```
