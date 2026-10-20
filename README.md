@@ -64,13 +64,17 @@ MediCore is a hospital management system with a Spring Boot REST API backend and
 | DELETE | `/api/appointments/{id}` | Admin delete | – | 204 | 403, 404 |
 
 
-### Springdoc-OpenAPI
+# MediCore Design
 
-Add to `pom.xml`:
+## Problem Statement
+Hospitals juggle patients, doctors, and appointments across paper and spreadsheets. MediCore centralizes this in one REST API with role-based access: admins manage accounts and doctors, doctors see and complete their schedule and write notes, patients self-register, view available slots, and book/cancel appointments. The system must prevent double-booking of a doctor's time slot and enforce role permissions on every endpoint.
 
-```xml
-<dependency>
-    <groupId>org.springdoc</groupId>
-    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-    <version>2.7.0</version>
-</dependency>
+## Layered Architecture
+
+```mermaid
+flowchart LR
+    A[React + Vite<br/>Nginx in prod] -->|HTTPS/JSON<br/>JSESSIONID cookie| B[Controller layer<br/>@RestController]
+    B --> C[Service layer<br/>@Service @Transactional]
+    C --> D[Repository layer<br/>JpaRepository + custom @Query]
+    C -.-> M[MapStruct mappers<br/>DTO ⇄ Entity]
+    D -->|JDBC| E[(PostgreSQL<br/>hospital_management)]
