@@ -63,15 +63,6 @@ MediCore is a hospital management system with a Spring Boot REST API backend and
 | PATCH | `/api/appointments/{id}/notes` | Doctor adds notes | `AppointmentNotesDTO` | 200 | 400, 403, 404, 409 |
 | DELETE | `/api/appointments/{id}` | Admin delete | – | 204 | 403, 404 |
 
-> ⚠️ **Inconsistencies I found in your code**
-> - **`PATCH /api/admin/users/{id}/enabled`** is called by your frontend (`usersApi.setEnabled`), but **no controller endpoint exists** for it. You must add it, or the "Enable/Disable" button will 404.
-> - **`PUT /api/auth/change-password`** is called by `authApi.changePassword`, but no controller method exists.
-> - **`GET /api/auth/me`** in your controller returns only `{email, role}` but your frontend Zod schema `authCurrentUserSchema` expects `{email, role, profile?}`. `profile` is optional so it parses — but you should return profile for full parity.
-> - **`frontend/schemas/user.schema.ts`** sends `enabled` in `UserCreateDTO`, but the backend record **does not have an `enabled` field** — Jackson will throw 400 on create if the frontend sends it. Align these.
-> - **`AppointmentsService.book`** validates the time is on a 30-min boundary **and** `@Future`, but **does not validate business hours (08:00–16:00)** even though `SlotsService` only advertises that window. A patient can book at 03:00. Add a check or the slot API and booking API will disagree.
-> - **`SlotsController` path `/{id}/available-slots`** — combined with `@RequestMapping("/api/doctors")` — is fine, but note it collides in URL-space with `DoctorsController /{id}`. Spring resolves by exact path suffix, so it works, but keep it in mind if you add more subresources.
-> - **`UsersController`** is missing the `PATCH .../enabled` handler that the frontend expects, as noted above.
-> - **`DoctorsRepo.findByIdForUpdate`** uses `@Lock(PESSIMISTIC_WRITE)` inside `AppointmentsService.book` — good. But `deleteDoctor` in `DoctorsService` **does not** check for existing appointments (its own TODO says so). Deleting a doctor with appointments will fail with a `DataIntegrityViolationException` (FK), which the frontend does not handle. Either soft-delete, cascade, or check before delete.
 
 ### Springdoc-OpenAPI
 
