@@ -1,0 +1,2191 @@
+package com.medicore.hospitalmangement;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class HospitalmangementApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(HospitalmangementApplication.class, args);
+	}
+
+}
+package com.medicore.hospitalmangement.repos;
+
+import com.medicore.hospitalmangement.entities.UserEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface UsersRepo extends JpaRepository<UserEntity,String> {
+    boolean existsByEmail(String email);
+
+    Optional<UserEntity> findByEmail(String email);
+}
+package com.medicore.hospitalmangement.repos;
+
+import com.medicore.hospitalmangement.entities.AppointmentEntity;
+import com.medicore.hospitalmangement.entities.AppointmentStatus;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+public interface AppointmentsRepo extends JpaRepository<AppointmentEntity, String> {
+
+    // join fetch avoids N+1 queries when the mapper reads doctor and patient names
+    @Query("""
+           select a from AppointmentEntity a
+           join fetch a.doctor join fetch a.patient
+           where a.id = :id
+           """)
+    Optional<AppointmentEntity> findByIdWithDetails(@Param("id") String id);
+
+    @Query("""
+           select a from AppointmentEntity a
+           join fetch a.doctor join fetch a.patient p
+           where p.user.email = :email
+           order by a.appointmentTime
+           """)
+    List<AppointmentEntity> findByPatientEmail(@Param("email") String email);
+
+    @Query("""
+           select a from AppointmentEntity a
+           join fetch a.doctor d join fetch a.patient
+           where d.user.email = :email
+           order by a.appointmentTime
+           """)
+    List<AppointmentEntity> findByDoctorEmail(@Param("email") String email);
+
+    @Query("""
+           select a from AppointmentEntity a
+           join fetch a.doctor d join fetch a.patient
+           where (:status is null or a.status = :status)
+             and (:doctorId is null or d.id = :doctorId)
+           order by a.appointmentTime
+           """)
+    List<AppointmentEntity> search(@Param("status") AppointmentStatus status,
+                                   @Param("doctorId") String doctorId);
+
+    boolean existsByDoctorIdAndAppointmentTimeAndStatusNot(
+            String doctorId, LocalDateTime time, AppointmentStatus status);
+
+    /**
+     * All SCHEDULED appointment times for a doctor within [dayStart, dayEnd).
+     * Used to compute available slots.
+     */
+    @Query("""
+        select a.appointmentTime
+          from AppointmentEntity a
+         where a.doctor.id = :doctorId
+           and a.appointmentTime >= :dayStart
+           and a.appointmentTime <  :dayEnd
+           and a.status = :status
+        """)
+    List<LocalDateTime> findScheduledTimesForDoctorOnDay(
+            @Param("doctorId") String doctorId,
+            @Param("dayStart") LocalDateTime dayStart,
+            @Param("dayEnd")   LocalDateTime dayEnd,
+            @Param("status")   AppointmentStatus status
+    );
+}package com.medicore.hospitalmangement.repos;
+
+import com.medicore.hospitalmangement.entities.PatientEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface PatientsRepo extends JpaRepository<PatientEntity, String> {
+
+    Optional<PatientEntity> findByUserEmail(String email);
+
+    // Avoids N+1 queries when mapping user.email for every patient
+    @Query("select p from PatientEntity p join fetch p.user")
+    List<PatientEntity> findAllWithUser();
+}package com.medicore.hospitalmangement.repos;
+
+import com.medicore.hospitalmangement.entities.DoctorEntity;
+import jakarta.persistence.LockModeType;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface DoctorsRepo extends JpaRepository<DoctorEntity, String> {
+
+    @Query("select d from DoctorEntity d join fetch d.user")
+    List<DoctorEntity> findAllWithUser();
+
+    @Query("""
+           select d from DoctorEntity d join fetch d.user
+           where lower(d.specialization) like lower(concat('%', :spec, '%'))
+           """)
+    List<DoctorEntity> searchBySpecialization(@Param("spec") String spec);
+
+    Optional<DoctorEntity> findByUserEmail(String email);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select d from DoctorEntity d where d.id = :id")
+    Optional<DoctorEntity> findByIdForUpdate(@Param("id") String id);
+
+//    Optional<DoctorEntity> findByIdForUpdate(@NotBlank(message = "Doctor id is required") String id);
+}package com.medicore.hospitalmangement.controllers;
+
+import com.medicore.hospitalmangement.dtos.doctors.*;
+import com.medicore.hospitalmangement.services.DoctorsService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/admin/doctors")
+@PreAuthorize("hasRole('ADMIN')")
+public class AdminDoctorsController {
+
+    private final DoctorsService service;
+
+    public AdminDoctorsController(DoctorsService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    public ResponseEntity<DoctorResponseDTO> create(@Valid @RequestBody DoctorCreateDTO dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createDoctor(dto));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<DoctorResponseDTO> update(
+            @PathVariable String id, @Valid @RequestBody DoctorUpdateDTO dto) {
+        return ResponseEntity.ok(service.updateDoctor(id, dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        service.deleteDoctor(id);
+        return ResponseEntity.noContent().build();   // 204
+    }
+}package com.medicore.hospitalmangement.controllers;
+
+import com.medicore.hospitalmangement.dtos.doctors.*;
+import com.medicore.hospitalmangement.services.DoctorsService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/doctors")
+public class DoctorsController {
+
+    private final DoctorsService service;
+
+    public DoctorsController(DoctorsService service) {
+        this.service = service;
+    }
+
+    // Declared before /{id} so "me" is never treated as an id
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('DOCTOR')")
+    public ResponseEntity<DoctorResponseDTO> getMyProfile(Authentication auth) {
+        return ResponseEntity.ok(service.getMyProfile(auth.getName()));
+    }
+
+    @PutMapping("/me")
+    @PreAuthorize("hasRole('DOCTOR')")
+    public ResponseEntity<DoctorResponseDTO> updateMyProfile(
+            Authentication auth, @Valid @RequestBody DoctorUpdateDTO dto) {
+        return ResponseEntity.ok(service.updateMyProfile(auth.getName(), dto));
+    }
+
+    // Any logged-in user (security config already requires authentication)
+    @GetMapping
+    public ResponseEntity<List<DoctorResponseDTO>> getDoctors(
+            @RequestParam(required = false) String specialization) {
+        return ResponseEntity.ok(service.getDoctors(specialization));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<DoctorResponseDTO> getById(@PathVariable String id) {
+        return ResponseEntity.ok(service.getDoctorById(id));
+    }
+}package com.medicore.hospitalmangement.controllers;
+
+import com.medicore.hospitalmangement.dtos.users.UserCreateDTO;
+import com.medicore.hospitalmangement.dtos.users.UserResponseDTO;
+import com.medicore.hospitalmangement.dtos.users.UserUpdateDTO;
+import com.medicore.hospitalmangement.services.UsersService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/admin/users")
+@PreAuthorize("hasRole('ADMIN')")   // every endpoint here is admin only
+public class UsersController {
+
+    private final UsersService usersService;
+
+    public UsersController(UsersService usersService) {
+        this.usersService = usersService;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<UserResponseDTO>> getUsers() {
+        return ResponseEntity.ok(usersService.getUsers());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponseDTO> getUserById(@PathVariable String id) {
+        return ResponseEntity.ok(usersService.getUserById(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<UserResponseDTO> createUser(@RequestBody @Valid UserCreateDTO dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(usersService.createUser(dto));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<UserResponseDTO> updateUser(
+            @PathVariable String id,
+            @RequestBody @Valid UserUpdateDTO dto) {
+        return ResponseEntity.ok(usersService.updateUser(id, dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable String id) {
+        usersService.deleteUser(id);
+        return ResponseEntity.noContent().build();   // 204
+    }
+}package com.medicore.hospitalmangement.controllers;
+
+import com.medicore.hospitalmangement.dtos.auth.LoginRequestDTO;
+import com.medicore.hospitalmangement.dtos.patients.PatientCreateDTO;
+import com.medicore.hospitalmangement.dtos.patients.PatientResponseDTO;
+import com.medicore.hospitalmangement.services.PatientsService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.Objects;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    private final PatientsService patientsService;
+    private final AuthenticationManager authManager;
+    private final SecurityContextRepository securityContextRepository;
+
+    public AuthController(PatientsService patientsService,
+                          AuthenticationManager authManager,
+                          SecurityContextRepository securityContextRepository) {
+        this.patientsService = patientsService;
+        this.authManager = authManager;
+        this.securityContextRepository = securityContextRepository;
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<PatientResponseDTO> register(@Valid @RequestBody PatientCreateDTO dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(patientsService.createPatient(dto));
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<Map<String, String>> login(
+            @Valid @RequestBody LoginRequestDTO dto,
+            HttpServletRequest request, HttpServletResponse response) {
+
+        System.out.println("fjasfjdoiafd");
+        // Calls CustomUserDetailsService + BCrypt check; throws on failure
+        Authentication auth = authManager.authenticate(
+                new UsernamePasswordAuthenticationToken(dto.email(), dto.password()));
+
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(auth);
+        SecurityContextHolder.setContext(context);
+        securityContextRepository.saveContext(context, request, response);  // creates JSESSIONID
+
+        String role = Objects.requireNonNull(auth.getAuthorities().iterator().next()
+                .getAuthority()).replace("ROLE_", "");
+        return ResponseEntity.ok(Map.of("email", auth.getName(), "role", role));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, String>> me(Authentication auth) {
+        String role = Objects.requireNonNull(auth.getAuthorities().iterator().next()
+                .getAuthority()).replace("ROLE_", "");
+        return ResponseEntity.ok(Map.of("email", auth.getName(), "role", role));
+    }
+}package com.medicore.hospitalmangement.controllers;
+
+import com.medicore.hospitalmangement.dtos.appointments.*;
+import com.medicore.hospitalmangement.entities.AppointmentStatus;
+import com.medicore.hospitalmangement.services.AppointmentsService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/appointments")
+public class AppointmentsController {
+
+    private final AppointmentsService service;
+
+    public AppointmentsController(AppointmentsService service) {
+        this.service = service;
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<AppointmentResponseDTO> book(
+            Authentication auth, @Valid @RequestBody AppointmentCreateDTO dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.book(auth.getName(), dto));
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasAnyRole('PATIENT','DOCTOR')")
+    public ResponseEntity<List<AppointmentResponseDTO>> getMine(Authentication auth) {
+        return ResponseEntity.ok(service.getMine(auth.getName(), hasRole(auth, "DOCTOR")));
+    }
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<AppointmentResponseDTO>> getAll(
+            @RequestParam(required = false) AppointmentStatus status,
+            @RequestParam(required = false) String doctorId) {
+        return ResponseEntity.ok(service.getAll(status, doctorId));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<AppointmentResponseDTO> getById(@PathVariable String id, Authentication auth) {
+        return ResponseEntity.ok(service.getById(id, auth.getName(), hasRole(auth, "ADMIN")));
+    }
+
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<AppointmentResponseDTO> cancel(@PathVariable String id, Authentication auth) {
+        return ResponseEntity.ok(service.cancel(id, auth.getName(), hasRole(auth, "ADMIN")));
+    }
+
+    @PatchMapping("/{id}/complete")
+    @PreAuthorize("hasAnyRole('DOCTOR','ADMIN')")
+    public ResponseEntity<AppointmentResponseDTO> complete(@PathVariable String id, Authentication auth) {
+        return ResponseEntity.ok(service.complete(id, auth.getName(), hasRole(auth, "ADMIN")));
+    }
+
+    @PatchMapping("/{id}/notes")
+    @PreAuthorize("hasRole('DOCTOR')")
+    public ResponseEntity<AppointmentResponseDTO> addNotes(
+            @PathVariable String id, Authentication auth, @Valid @RequestBody AppointmentNotesDTO dto) {
+        return ResponseEntity.ok(service.addNotes(id, auth.getName(), dto));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    private boolean hasRole(Authentication auth, String role) {
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
+    }
+}package com.medicore.hospitalmangement.controllers;
+
+import com.medicore.hospitalmangement.services.SlotsService;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/doctors")
+public class SlotsController {
+
+    private final SlotsService slotsService;
+
+    public SlotsController(SlotsService slotsService) {
+        this.slotsService = slotsService;
+    }
+
+    /**
+     * GET /api/doctors/{id}/available-slots?date=2026-11-02
+     *
+     * Returns: ["08:00","08:30","09:00","09:30","10:00","10:30","11:00",
+     *           "11:30","12:00","12:30","13:00","13:30","14:00","14:30",
+     *           "15:00","15:30"]
+     * minus any slots already booked for that doctor on that date.
+     */
+    @GetMapping("/{id}/available-slots")
+    @PreAuthorize("hasAnyRole('ADMIN','PATIENT','DOCTOR')")
+    public ResponseEntity<List<String>> getAvailableSlots(
+            @PathVariable String id,
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return ResponseEntity.ok(slotsService.getAvailableSlots(id, date));
+    }
+}package com.medicore.hospitalmangement.controllers;
+
+import com.medicore.hospitalmangement.dtos.patients.PatientResponseDTO;
+import com.medicore.hospitalmangement.dtos.patients.PatientUpdateDTO;
+import com.medicore.hospitalmangement.services.PatientsService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/patients")
+public class PatientsController {
+
+    private final PatientsService service;
+
+    public PatientsController(PatientsService service) {
+        this.service = service;
+    }
+
+    // ---------- Own profile (PATIENT) ----------
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<PatientResponseDTO> getMyProfile(Authentication auth) {
+        return ResponseEntity.ok(service.getMyProfile(auth.getName()));
+    }
+
+    @PutMapping("/me")
+    @PreAuthorize("hasRole('PATIENT')")
+    public ResponseEntity<PatientResponseDTO> updateMyProfile(
+            Authentication auth, @Valid @RequestBody PatientUpdateDTO dto) {
+        return ResponseEntity.ok(service.updateMyProfile(auth.getName(), dto));
+    }
+
+    // ---------- Admin ----------
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<PatientResponseDTO>> getAll() {
+        return ResponseEntity.ok(service.getAllPatients());
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")   // add doctor access later via an @authz check
+    public ResponseEntity<PatientResponseDTO> getById(@PathVariable String id) {
+        return ResponseEntity.ok(service.getPatientById(id));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PatientResponseDTO> update(
+            @PathVariable String id, @Valid @RequestBody PatientUpdateDTO dto) {
+        return ResponseEntity.ok(service.updatePatient(id, dto));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        service.deletePatientById(id);
+        return ResponseEntity.noContent().build();   // 204
+    }
+}package com.medicore.hospitalmangement.config;
+
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import tools.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+@Configuration
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    private final ObjectMapper mapper;
+
+    public SecurityConfig(ObjectMapper mapper) {
+        this.mapper = mapper;
+    }
+
+    @Bean
+    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+                .cors(Customizer.withDefaults())
+                .csrf(AbstractHttpConfigurer::disable)
+                .securityContext(sc -> sc.requireExplicitSave(true))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/login", "/api/auth/register",
+                                "/swagger-ui/**", "/v3/api-docs/**",
+                                "/actuator/health", "/actuator/health/**").permitAll()   // added for Docker healthcheck
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .anyRequest().authenticated())
+
+                // No formLogin(): login is handled by AuthController (JSON body)
+                .logout(logout -> logout
+                        .logoutUrl("/api/auth/logout")
+                        .logoutSuccessHandler((req, res, auth) ->
+                                res.setStatus(HttpStatus.NO_CONTENT.value()))
+                        .deleteCookies("JSESSIONID"))
+
+                .httpBasic(Customizer.withDefaults())
+
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint((req, res, ex) ->
+                                writeError(res, HttpStatus.UNAUTHORIZED,
+                                        "Authentication required", req.getRequestURI()))
+                        .accessDeniedHandler((req, res, ex) ->
+                                writeError(res, HttpStatus.FORBIDDEN,
+                                        "You do not have permission to do this", req.getRequestURI())));
+
+        return http.build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    AuthenticationManager authenticationManager(AuthenticationConfiguration cfg) throws Exception {
+        return cfg.getAuthenticationManager();
+    }
+
+    @Bean
+    SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        var c = new CorsConfiguration();
+
+        // Allow both dev (Vite :5173) and Docker (Nginx :80) origins.
+        // Add your production hostname here when you deploy.
+        c.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://localhost",          // Nginx frontend in Docker on port 80
+                "http://127.0.0.1"
+        ));
+
+        c.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+        c.setAllowCredentials(true);
+        c.setAllowedHeaders(List.of("*"));
+        c.setExposedHeaders(List.of("Set-Cookie"));
+
+        var s = new UrlBasedCorsConfigurationSource();
+        s.registerCorsConfiguration("/**", c);
+        return s;
+    }
+
+    private void writeError(HttpServletResponse res, HttpStatus status,
+                            String message, String path) throws IOException {
+        res.setStatus(status.value());
+        res.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        mapper.writeValue(res.getOutputStream(), Map.of(
+                "timestamp", Instant.now().toString(),
+                "status", status.value(),
+                "error", status.getReasonPhrase(),
+                "message", message,
+                "path", path));
+    }
+}package com.medicore.hospitalmangement.exceptions;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.Instant;
+import java.util.Map;
+
+@RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)
+public class GlobalExceptionHandler {
+
+    // Safety net: never leak stack traces to the client
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleOther(Exception ex, HttpServletRequest req) {
+        System.out.println("Global : "+ex.getClass().getName());
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Something went wrong", req, null);
+    }
+
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, String message,
+                                                HttpServletRequest req,
+                                                Map<String, String> fieldErrors) {
+        ErrorResponse body = new ErrorResponse(
+                Instant.now(), status.value(), status.getReasonPhrase(),
+                message, req.getRequestURI(), fieldErrors);
+        return ResponseEntity.status(status).body(body);
+    }
+}
+package com.medicore.hospitalmangement.exceptions;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+@ResponseStatus(HttpStatus.CONFLICT)
+public class DuplicateResourceException extends RuntimeException {
+    public DuplicateResourceException(String message) {
+        super(message);
+    }
+
+}
+package com.medicore.hospitalmangement.exceptions;
+
+public class InvalidStatusTransitionException extends RuntimeException {
+    public InvalidStatusTransitionException(String message) { super(message); }
+}package com.medicore.hospitalmangement.exceptions;
+
+public class SlotAlreadyBookedException extends RuntimeException {
+  public SlotAlreadyBookedException(String message) { super(message); }
+}package com.medicore.hospitalmangement.exceptions;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class ValidationExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String,String>> handleMethodArgumentNotValidException(MethodArgumentNotValidException ex){
+        Map<String,String> map = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach((error)->{
+            map.put(((FieldError) error).getField(),error.getDefaultMessage());
+        });
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(map);
+    }
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest req) {
+        String message = "A database constraint violation occurred.";
+
+        // Check if the violation is related to the email column/index
+        if (ex.getMessage() != null && ex.getMessage().toUpperCase().contains("EMAIL")) {
+            message = "Email address already exists.";
+        }
+
+        return build(HttpStatus.CONFLICT,message,req,null);
+    }
+
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, String message,
+                                                HttpServletRequest req,
+                                                Map<String, String> fieldErrors) {
+        ErrorResponse body = new ErrorResponse(
+                Instant.now(), status.value(), status.getReasonPhrase(),
+                message, req.getRequestURI(), fieldErrors);
+        return ResponseEntity.status(status).body(body);
+    }
+}
+package com.medicore.hospitalmangement.exceptions;
+
+
+public class ResourceNotFoundException extends RuntimeException{
+
+    public ResourceNotFoundException() {
+        super("Resource not found");
+    }
+
+    public ResourceNotFoundException(String message) {
+        super(message);
+    }
+
+    public ResourceNotFoundException(String resource, String id) {
+        super(resource + " not found with id " + id);
+    }
+}
+package com.medicore.hospitalmangement.exceptions;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.Instant;
+import java.util.Map;
+
+@RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class SecurityExceptionHandler {
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleBadCredentials(
+            BadCredentialsException ex, HttpServletRequest req) {
+        return build(HttpStatus.UNAUTHORIZED, "Invalid email or password", req, null);
+    }
+
+    @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<ErrorResponse> handleDisabled(
+            DisabledException ex, HttpServletRequest req) {
+        return build(HttpStatus.FORBIDDEN, "Account is disabled", req, null);
+    }
+
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, String message,
+                                                HttpServletRequest req,
+                                                Map<String, String> fieldErrors) {
+        ErrorResponse body = new ErrorResponse(
+                Instant.now(), status.value(), status.getReasonPhrase(),
+                message, req.getRequestURI(), fieldErrors);
+        return ResponseEntity.status(status).body(body);
+    }
+}
+package com.medicore.hospitalmangement.exceptions;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.Instant;
+import java.util.Map;
+
+@RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class ResourceExceptionHandler {
+
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateResource(DuplicateResourceException ex) {
+        Map<String, Object> body = Map.of(
+                "timestamp", Instant.now(),
+                "status", HttpStatus.CONFLICT.value(),
+                "error", "Conflict",
+                "message", ex.getMessage()
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleResourceNotFound(ResourceNotFoundException ex) {
+        Map<String, Object> body = Map.of(
+                "timestamp", Instant.now(),
+                "status", HttpStatus.NOT_FOUND.value(),
+                "error", "Not Found",
+                "message", ex.getMessage()
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(SlotAlreadyBookedException.class)
+    public ResponseEntity<ErrorResponse> handleSlotTaken(SlotAlreadyBookedException ex, HttpServletRequest req) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), req, null);
+    }
+
+    @ExceptionHandler(InvalidStatusTransitionException.class)
+    public ResponseEntity<ErrorResponse> handleBadTransition(InvalidStatusTransitionException ex, HttpServletRequest req) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), req, null);
+    }
+
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, String message,
+                                                HttpServletRequest req,
+                                                Map<String, String> fieldErrors) {
+        ErrorResponse body = new ErrorResponse(
+                Instant.now(), status.value(), status.getReasonPhrase(),
+                message, req.getRequestURI(), fieldErrors);
+        return ResponseEntity.status(status).body(body);
+    }
+}
+package com.medicore.hospitalmangement.exceptions;
+
+import java.time.Instant;
+import java.util.Map;
+
+public record ErrorResponse(
+        Instant timestamp,
+        int status,
+        String error,
+        String message,
+        String path,
+        Map<String, String> fieldErrors   // only filled for validation errors
+) {}package com.medicore.hospitalmangement.mappers;
+
+import com.medicore.hospitalmangement.dtos.users.UserCreateDTO;
+import com.medicore.hospitalmangement.dtos.users.UserDTO;
+import com.medicore.hospitalmangement.dtos.users.UserResponseDTO;
+import com.medicore.hospitalmangement.dtos.users.UserUpdateDTO;
+import com.medicore.hospitalmangement.entities.UserEntity;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
+
+@Mapper(componentModel = "spring")
+public interface UserMapper {
+
+    UserEntity toEntity(UserDTO userDTO);
+    UserEntity toEntity(UserCreateDTO userDTO);
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "password", ignore = true)
+    @Mapping(target = "role", ignore = true)
+    void updateEntity(UserUpdateDTO dto, @MappingTarget UserEntity entity);
+
+    UserResponseDTO toResponseDTO(UserEntity userEntity);
+}
+
+
+package com.medicore.hospitalmangement.mappers;
+
+import com.medicore.hospitalmangement.dtos.appointments.*;
+import com.medicore.hospitalmangement.entities.AppointmentEntity;
+import org.mapstruct.*;
+
+@Mapper(componentModel = "spring")
+public interface AppointmentMapper {
+
+    // patient and doctor are loaded and set in the service
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "patient", ignore = true)
+    @Mapping(target = "doctor", ignore = true)
+    @Mapping(target = "status", ignore = true)      // always starts as SCHEDULED
+    @Mapping(target = "notes", ignore = true)       // doctors only
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    AppointmentEntity toEntity(AppointmentCreateDTO dto);
+
+    @Mapping(source = "doctor.id", target = "doctorId")
+    @Mapping(source = "doctor.fullName", target = "doctorName")
+    @Mapping(source = "doctor.specialization", target = "specialization")
+    @Mapping(source = "patient.id", target = "patientId")
+    @Mapping(source = "patient.fullName", target = "patientName")
+    AppointmentResponseDTO toResponseDTO(AppointmentEntity entity);
+}package com.medicore.hospitalmangement.mappers;
+
+import com.medicore.hospitalmangement.dtos.doctors.*;
+import com.medicore.hospitalmangement.entities.DoctorEntity;
+import org.mapstruct.*;
+
+@Mapper(
+        componentModel = "spring",
+        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE
+)
+public interface DoctorMapper {
+
+    // user is set in the service after the UserEntity is saved
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    DoctorEntity toEntity(DoctorCreateDTO dto);
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    void updateEntity(DoctorUpdateDTO dto, @MappingTarget DoctorEntity entity);
+
+    @Mapping(source = "user.email", target = "email")
+    DoctorResponseDTO toResponseDTO(DoctorEntity entity);
+}package com.medicore.hospitalmangement.mappers;
+
+import com.medicore.hospitalmangement.dtos.patients.PatientCreateDTO;
+import com.medicore.hospitalmangement.dtos.patients.PatientResponseDTO;
+import com.medicore.hospitalmangement.dtos.patients.PatientUpdateDTO;
+import com.medicore.hospitalmangement.entities.PatientEntity;
+import org.mapstruct.*;
+
+@Mapper(
+        componentModel = "spring",
+        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE
+)
+public interface PatientMapper {
+
+    // Create: user is set in the service after the UserEntity is saved
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    PatientEntity toEntity(PatientCreateDTO dto);
+
+    // Update: modifies the existing managed entity in place
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    void updateEntity(PatientUpdateDTO dto, @MappingTarget PatientEntity entity);
+
+    // Response: email comes from the nested user
+    @Mapping(source = "user.email", target = "email")
+    PatientResponseDTO toResponseDTO(PatientEntity entity);
+}package com.medicore.hospitalmangement.dtos.doctors;
+
+import jakarta.validation.constraints.*;
+
+/** Profile fields only. Used by admin (PUT /{id}) and by the doctor (PUT /me). */
+public record DoctorUpdateDTO(
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotBlank(message = "Specialization is required")
+        @Size(max = 100, message = "Specialization must be at most 100 characters")
+        String specialization,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}package com.medicore.hospitalmangement.dtos.doctors;
+
+import jakarta.validation.constraints.*;
+
+/** Admin creates a doctor: login fields + profile fields. Role is fixed server-side. */
+public record DoctorCreateDTO(
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, max = 20, message = "Password must be 6 to 20 characters")
+        String password,
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotBlank(message = "Specialization is required")
+        @Size(max = 100, message = "Specialization must be at most 100 characters")
+        String specialization,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}package com.medicore.hospitalmangement.dtos.doctors;
+
+import jakarta.validation.constraints.NotNull;
+
+public record DoctorDTO(
+        @NotNull String fullName,
+        @NotNull String specialization,
+        //TODO: Phone number validation
+        String phoneNumber
+) {
+}
+
+package com.medicore.hospitalmangement.dtos.doctors;
+
+import java.time.Instant;
+
+public record DoctorResponseDTO(
+        String id,
+        String email,
+        String fullName,
+        String specialization,
+        String phone,
+        Instant updatedAt
+) {}package com.medicore.hospitalmangement.dtos.appointments;
+
+import com.medicore.hospitalmangement.entities.AppointmentStatus;
+import java.time.Instant;
+import java.time.LocalDateTime;
+
+public record AppointmentResponseDTO(
+        String id,
+        String doctorId,
+        String doctorName,
+        String specialization,
+        String patientId,
+        String patientName,
+        LocalDateTime appointmentTime,
+        AppointmentStatus status,
+        String reason,
+        String notes,
+        Instant createdAt,
+        Instant updatedAt
+) {}package com.medicore.hospitalmangement.dtos.appointments;
+
+import jakarta.validation.constraints.*;
+
+public record AppointmentNotesDTO(
+        @NotBlank(message = "Notes cannot be blank")
+        @Size(max = 1000, message = "Notes must be at most 1000 characters")
+        String notes
+) {}package com.medicore.hospitalmangement.dtos.appointments;
+
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.time.LocalDateTime;
+
+public record AppointmentDTO(
+        @NotNull Long doctorId,
+        @NotNull @Future LocalDateTime appointmentTime,
+        @Size(max = 500) String reason
+) {
+}
+
+package com.medicore.hospitalmangement.dtos.appointments;
+
+import jakarta.validation.constraints.*;
+import java.time.LocalDateTime;
+
+/** Patient books an appointment. The patient comes from the login, never from this body. */
+public record AppointmentCreateDTO(
+        @NotBlank(message = "Doctor id is required")
+        String doctorId,
+
+        @NotNull(message = "Appointment time is required")
+        @Future(message = "Appointment time must be in the future")
+        LocalDateTime appointmentTime,
+
+        @Size(max = 500, message = "Reason must be at most 500 characters")
+        String reason
+) {}public record AppointmentResponseDTO(
+        String id,
+        String doctorId,
+        String doctorName,
+        String specialization,
+        String patientId,
+        String patientName,
+        LocalDateTime appointmentTime,
+        AppointmentStatus status,
+        String reason,
+        String notes,
+        Instant createdAt,
+        Instant updatedAt
+) {}
+public record DoctorResponseDTO(
+        String id,
+        String email,
+        String fullName,
+        String specialization,
+        String phone,
+        Instant updatedAt
+) {}
+public record PatientResponseDTO(
+        String id,
+        String email,
+        String fullName,
+        Integer age,
+        String gender,
+        String phone,
+        Instant updatedAt
+) {}
+
+public record UserResponseDTO(
+        String id,
+        String email,
+        String displayName,
+        Role role,
+        boolean enabled,
+        Instant createdAt,
+        Instant updatedAt
+) {
+}
+
+
+
+public record AppointmentCreateDTO(
+        @NotBlank(message = "Doctor id is required")
+        String doctorId,
+
+        @NotNull(message = "Appointment time is required")
+        @Future(message = "Appointment time must be in the future")
+        LocalDateTime appointmentTime,
+
+        @Size(max = 500, message = "Reason must be at most 500 characters")
+        String reason
+) {}
+
+public record LoginRequestDTO(
+        @NotBlank(message = "Email is required") @Email String email,
+        @NotBlank(message = "Password is required") String password
+) {}
+
+public record DoctorCreateDTO(
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, max = 20, message = "Password must be 6 to 20 characters")
+        String password,
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotBlank(message = "Specialization is required")
+        @Size(max = 100, message = "Specialization must be at most 100 characters")
+        String specialization,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+public record PatientCreateDTO(
+
+        // ---- User (login) fields ----
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, max = 20, message = "Password must be 6 to 20 characters")
+        String password,
+
+        // ---- Patient profile fields ----
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotNull(message = "Age is required")
+        @Min(value = 0, message = "Age cannot be negative")
+        @Max(value = 130, message = "Age must be realistic")
+        Integer age,
+
+        @NotBlank(message = "Gender is required")
+        @Pattern(regexp = "(?i)MALE|FEMALE|OTHER",
+                message = "Gender must be MALE, FEMALE or OTHER")
+        String gender,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+public record UserCreateDTO(
+        @NotBlank(message = "Email is required")
+        @Email(message = "Invalid email format")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, message = "Password must be at least 6 characters long")
+        String password,
+
+        String displayName,
+
+        @NotNull(message = "Role is required")
+        @Pattern(regexp = "ADMIN|DOCTOR|PATIENT", message = "Role must be either ADMIN or DOCTOR or PATIENT")
+        String role
+) {}
+
+public record AppointmentNotesDTO(
+        @NotBlank(message = "Notes cannot be blank")
+        @Size(max = 1000, message = "Notes must be at most 1000 characters")
+        String notes
+) {}
+
+
+
+public record DoctorUpdateDTO(
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotBlank(message = "Specialization is required")
+        @Size(max = 100, message = "Specialization must be at most 100 characters")
+        String specialization,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+ublic record PatientUpdateDTO(
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+//        @NotNull(message = "Age is required")
+        @Min(value = 0, message = "Age cannot be negative")
+        @Max(value = 130, message = "Age must be realistic")
+        Integer age,
+
+        @NotBlank(message = "Gender is required")
+        @Pattern(regexp = "(?i)MALE|FEMALE|OTHER",
+                message = "Gender must be MALE, FEMALE or OTHER")
+        String gender,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}
+
+public record UserUpdateDTO(
+        @Email(message = "Invalid email format")
+        String email,
+
+        @Size(min = 6, message = "Password must be at least 6 characters long")
+        String password,
+
+        String displayName,
+
+        @Pattern(regexp = "ADMIN|DOCTOR|PATIENT", message = "Role must be either ADMIN or DOCTOR or PATIENT")
+        Role role,
+
+        Boolean enabled
+) {}package com.medicore.hospitalmangement.dtos.users;
+
+import com.medicore.hospitalmangement.entities.Role;
+import java.time.Instant;
+
+public record UserResponseDTO(
+        String id,
+        String email,
+        String displayName,
+        Role role,
+        boolean enabled,
+        Instant createdAt,
+        Instant updatedAt
+) {
+}package com.medicore.hospitalmangement.dtos.users;
+
+public class UserDTO {
+}
+package com.medicore.hospitalmangement.dtos.users;
+
+import com.medicore.hospitalmangement.entities.Role;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+public record UserUpdateDTO(
+        @Email(message = "Invalid email format")
+        String email,
+
+        @Size(min = 6, message = "Password must be at least 6 characters long")
+        String password,
+
+        String displayName,
+
+        @Pattern(regexp = "ADMIN|DOCTOR|PATIENT", message = "Role must be either ADMIN or DOCTOR or PATIENT")
+        Role role,
+
+        Boolean enabled
+) {}package com.medicore.hospitalmangement.dtos.users;
+
+import com.medicore.hospitalmangement.entities.Role;
+import jakarta.validation.constraints.*;
+
+public record UserCreateDTO(
+        @NotBlank(message = "Email is required")
+        @Email(message = "Invalid email format")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, message = "Password must be at least 6 characters long")
+        String password,
+
+        String displayName,
+
+        @NotNull(message = "Role is required")
+        @Pattern(regexp = "ADMIN|DOCTOR|PATIENT", message = "Role must be either ADMIN or DOCTOR or PATIENT")
+        String role
+) {}package com.medicore.hospitalmangement.dtos.patients;
+
+import jakarta.validation.constraints.*;
+
+public record PatientUpdateDTO(
+
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+//        @NotNull(message = "Age is required")
+        @Min(value = 0, message = "Age cannot be negative")
+        @Max(value = 130, message = "Age must be realistic")
+        Integer age,
+
+        @NotBlank(message = "Gender is required")
+        @Pattern(regexp = "(?i)MALE|FEMALE|OTHER",
+                message = "Gender must be MALE, FEMALE or OTHER")
+        String gender,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}package com.medicore.hospitalmangement.dtos.patients;
+
+import jakarta.validation.constraints.*;
+
+public record PatientCreateDTO(
+
+        // ---- User (login) fields ----
+        @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
+        String email,
+
+        @NotBlank(message = "Password is required")
+        @Size(min = 6, max = 20, message = "Password must be 6 to 20 characters")
+        String password,
+
+        // ---- Patient profile fields ----
+        @NotBlank(message = "Full name is required")
+        @Size(max = 100, message = "Full name must be at most 100 characters")
+        String fullName,
+
+        @NotNull(message = "Age is required")
+        @Min(value = 0, message = "Age cannot be negative")
+        @Max(value = 130, message = "Age must be realistic")
+        Integer age,
+
+        @NotBlank(message = "Gender is required")
+        @Pattern(regexp = "(?i)MALE|FEMALE|OTHER",
+                message = "Gender must be MALE, FEMALE or OTHER")
+        String gender,
+
+        @Pattern(regexp = "^[6-9]\\d{9}$",
+                message = "Phone must be a valid 10-digit Indian mobile number")
+        String phone
+) {}package com.medicore.hospitalmangement.dtos.patients;
+
+import java.time.Instant;
+
+public record PatientResponseDTO(
+        String id,
+        String email,
+        String fullName,
+        Integer age,
+        String gender,
+        String phone,
+        Instant updatedAt
+) {}
+package com.medicore.hospitalmangement.dtos.patients;
+
+
+public class PatientDTO {
+
+}
+package com.medicore.hospitalmangement.dtos.auth;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
+public record LoginRequestDTO(
+        @NotBlank(message = "Email is required") @Email String email,
+        @NotBlank(message = "Password is required") String password
+) {}package com.medicore.hospitalmangement.entities;
+
+public enum AppointmentStatus {
+    SCHEDULED, COMPLETED, CANCELLED
+}package com.medicore.hospitalmangement.entities;
+
+public enum Role { ADMIN, DOCTOR, PATIENT }
+package com.medicore.hospitalmangement.entities;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.Instant;
+
+@Entity
+@Table(name = "patients")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class PatientEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
+
+    @OneToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    private UserEntity user;
+
+    @Column(nullable = false)
+    private String fullName;
+
+    @Column(nullable = false)
+    private Integer age;
+
+    @Column(nullable = false)
+    private String gender;
+
+    private String phone;
+
+    @UpdateTimestamp
+    private Instant updatedAt;
+}package com.medicore.hospitalmangement.entities;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(
+        name = "appointments",
+//        uniqueConstraints = @UniqueConstraint( //Used to prevent overlapping schedules for a certain doctor
+//                name = "uk_doctor_slot",
+//                columnNames = {"doctor_id", "appointment_time"}
+//        ),
+        indexes = { //Used for fast reads
+                @Index(name = "idx_appt_patient", columnList = "patient_id"),
+                @Index(name = "idx_appt_doctor_time", columnList = "doctor_id, appointment_time")
+        }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class AppointmentEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
+
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "patient_id", nullable = false)
+    private PatientEntity patient;
+
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "doctor_id", nullable = false)
+    private DoctorEntity doctor;
+
+    @Column(name = "appointment_time", nullable = false)
+    private LocalDateTime appointmentTime;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AppointmentStatus status = AppointmentStatus.SCHEDULED;
+
+    @Column(length = 500)
+    private String reason;          // patient's reason for visit
+
+    @Column(length = 1000)
+    private String notes;           // doctor's notes, set by the doctor only
+
+    @CreationTimestamp
+    @Column(updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    private Instant updatedAt;
+}
+package com.medicore.hospitalmangement.entities;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.Instant;
+
+@Entity
+@Table(name = "doctors")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class DoctorEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
+
+    @OneToOne(optional = false, fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    private UserEntity user;
+
+    @Column(nullable = false)
+    private String fullName;
+
+    @Column(nullable = false)
+    private String specialization;
+
+    private String phone;
+
+    @UpdateTimestamp
+    private Instant updatedAt;
+}
+package com.medicore.hospitalmangement.entities;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.time.Instant;
+
+@Entity
+@Table(name = "users")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class UserEntity {
+    @Id @GeneratedValue(strategy = GenerationType.UUID)
+    String id;
+
+    @Column(nullable = false, unique = true)
+    String email;
+
+    @Column(nullable = false)
+    String password;
+
+    @Column(nullable = true)
+    String displayName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role;
+
+    @Column(name = "is_enabled", nullable = false)
+//    @ColumnDefault("true")
+    @Builder.Default
+    private boolean enabled = true;
+
+    @CreationTimestamp
+    @Column(updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    private Instant updatedAt;
+
+    @Override
+    public String toString() {
+        return "UserEntity{" +
+                "id='" + id + '\'' +
+                ", email='" + email + '\'' +
+                ", password='" + password + '\'' +
+                ", displayName='" + displayName + '\'' +
+                ", role=" + role +
+                ", enabled=" + enabled +
+                ", createdAt=" + createdAt +
+                ", updatedAt=" + updatedAt +
+                '}';
+    }
+}
+package com.medicore.hospitalmangement.services;
+
+import com.medicore.hospitalmangement.dtos.appointments.*;
+import com.medicore.hospitalmangement.entities.*;
+import com.medicore.hospitalmangement.exceptions.*;
+import com.medicore.hospitalmangement.mappers.AppointmentMapper;
+import com.medicore.hospitalmangement.repos.*;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@Transactional(readOnly = true)
+public class AppointmentsService {
+
+    private static final int SLOT_MINUTES = 30;
+
+    private final AppointmentsRepo repo;
+    private final PatientsRepo patientsRepo;
+    private final DoctorsRepo doctorsRepo;
+    private final AppointmentMapper mapper;
+
+    public AppointmentsService(AppointmentsRepo repo, PatientsRepo patientsRepo,
+                               DoctorsRepo doctorsRepo, AppointmentMapper mapper) {
+        this.repo = repo;
+        this.patientsRepo = patientsRepo;
+        this.doctorsRepo = doctorsRepo;
+        this.mapper = mapper;
+    }
+
+    // ---------- Book (PATIENT) ----------
+
+    @Transactional
+    public AppointmentResponseDTO book(String patientEmail, AppointmentCreateDTO dto) {
+        PatientEntity patient = patientsRepo.findByUserEmail(patientEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile for " + patientEmail));
+
+        // Row lock on the doctor: two simultaneous bookings for the same doctor run one after the other
+        DoctorEntity doctor = doctorsRepo.findByIdForUpdate(dto.doctorId())
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", dto.doctorId()));
+
+        validateSlot(dto.appointmentTime());
+
+        if (repo.existsByDoctorIdAndAppointmentTimeAndStatusNot(
+                doctor.getId(), dto.appointmentTime(), AppointmentStatus.CANCELLED)) {
+            throw new SlotAlreadyBookedException("Doctor is already booked at " + dto.appointmentTime());
+        }
+
+        AppointmentEntity appointment = mapper.toEntity(dto);
+        appointment.setPatient(patient);
+        appointment.setDoctor(doctor);
+        return mapper.toResponseDTO(repo.save(appointment));
+    }
+
+    // ---------- Read ----------
+
+    public List<AppointmentResponseDTO> getAll(AppointmentStatus status, String doctorId) {
+        return repo.search(status, doctorId).stream().map(mapper::toResponseDTO).toList();
+    }
+
+    public List<AppointmentResponseDTO> getMine(String email, boolean isDoctor) {
+        List<AppointmentEntity> list = isDoctor
+                ? repo.findByDoctorEmail(email)
+                : repo.findByPatientEmail(email);
+        return list.stream().map(mapper::toResponseDTO).toList();
+    }
+
+    public AppointmentResponseDTO getById(String id, String email, boolean isAdmin) {
+        AppointmentEntity a = findOrThrow(id);
+        requireParticipantOrAdmin(a, email, isAdmin);
+        return mapper.toResponseDTO(a);
+    }
+
+    // ---------- Status changes ----------
+
+    @Transactional
+    public AppointmentResponseDTO cancel(String id, String email, boolean isAdmin) {
+        AppointmentEntity a = findOrThrow(id);
+        requireParticipantOrAdmin(a, email, isAdmin);
+        transition(a, AppointmentStatus.CANCELLED);
+        return mapper.toResponseDTO(a);
+    }
+
+    @Transactional
+    public AppointmentResponseDTO complete(String id, String email, boolean isAdmin) {
+        AppointmentEntity a = findOrThrow(id);
+        if (!isAdmin && !isDoctorOf(a, email)) {
+            throw new AccessDeniedException("Only the assigned doctor can complete this appointment");
+        }
+        transition(a, AppointmentStatus.COMPLETED);
+        return mapper.toResponseDTO(a);
+    }
+
+    @Transactional
+    public AppointmentResponseDTO addNotes(String id, String doctorEmail, AppointmentNotesDTO dto) {
+        AppointmentEntity a = findOrThrow(id);
+        if (!isDoctorOf(a, doctorEmail)) {
+            throw new AccessDeniedException("Only the assigned doctor can add notes");
+        }
+        if (a.getStatus() == AppointmentStatus.CANCELLED) {
+            throw new InvalidStatusTransitionException("Cannot add notes to a cancelled appointment");
+        }
+        a.setNotes(dto.notes().trim());
+        return mapper.toResponseDTO(a);
+    }
+
+    // ---------- Delete (ADMIN) ----------
+
+    @Transactional
+    public void delete(String id) {
+        repo.delete(findOrThrow(id));
+    }
+
+    // ---------- Helpers ----------
+
+    private AppointmentEntity findOrThrow(String id) {
+        return repo.findByIdWithDetails(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Appointment", id));
+    }
+
+    /** Only SCHEDULED appointments may change; COMPLETED and CANCELLED are final. */
+    private void transition(AppointmentEntity a, AppointmentStatus target) {
+        if (a.getStatus() != AppointmentStatus.SCHEDULED) {
+            throw new InvalidStatusTransitionException(
+                    "Cannot change a " + a.getStatus() + " appointment to " + target);
+        }
+        a.setStatus(target);
+    }
+
+    /** Slots start on the hour or half hour, e.g. 10:00 or 10:30. */
+    private void validateSlot(LocalDateTime time) {
+        if (time.getMinute() % SLOT_MINUTES != 0 || time.getSecond() != 0 || time.getNano() != 0) {
+            throw new IllegalArgumentException(
+                    "Appointments must start on a " + SLOT_MINUTES + "-minute boundary (e.g. 10:00, 10:30)");
+        }
+    }
+
+    private boolean isPatientOf(AppointmentEntity a, String email) {
+        return a.getPatient().getUser().getEmail().equals(email);
+    }
+
+    private boolean isDoctorOf(AppointmentEntity a, String email) {
+        return a.getDoctor().getUser().getEmail().equals(email);
+    }
+
+    private void requireParticipantOrAdmin(AppointmentEntity a, String email, boolean isAdmin) {
+        if (!isAdmin && !isPatientOf(a, email) && !isDoctorOf(a, email)) {
+            throw new AccessDeniedException("You do not have access to this appointment");
+        }
+    }
+}package com.medicore.hospitalmangement.services;
+
+import com.medicore.hospitalmangement.entities.UserEntity;
+import com.medicore.hospitalmangement.repos.UsersRepo;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+
+    private final UsersRepo usersRepo;
+
+    public CustomUserDetailsService(UsersRepo usersRepo) {
+        this.usersRepo = usersRepo;
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String email) {
+        UserEntity u = usersRepo.findByEmail(email)          // <-- database query
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        return User.withUsername(u.getEmail())
+                .password(u.getPassword())                   // BCrypt hash from the DB
+                .authorities("ROLE_" + u.getRole().name())
+                .disabled(!u.isEnabled())
+                .build();
+    }
+}package com.medicore.hospitalmangement.services;
+
+import com.medicore.hospitalmangement.entities.AppointmentStatus;
+import com.medicore.hospitalmangement.exceptions.ResourceNotFoundException;
+import com.medicore.hospitalmangement.repos.AppointmentsRepo;
+import com.medicore.hospitalmangement.repos.DoctorsRepo;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+@Service
+public class SlotsService {
+
+    private static final LocalTime OPEN_TIME  = LocalTime.of(8, 0);
+    private static final LocalTime CLOSE_TIME = LocalTime.of(16, 0);
+    private static final int SLOT_MINUTES = 30;
+
+    private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
+
+    private final AppointmentsRepo appointmentsRepo;
+    private final DoctorsRepo doctorRepo;
+
+    public SlotsService(AppointmentsRepo appointmentsRepo, DoctorsRepo doctorRepo) {
+        this.appointmentsRepo = appointmentsRepo;
+        this.doctorRepo = doctorRepo;
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getAvailableSlots(String doctorId, LocalDate date) {
+        if (!doctorRepo.existsById(doctorId)) {
+            throw new ResourceNotFoundException("Doctor",doctorId);
+        }
+
+        // Only today or future dates
+        if (date.isBefore(LocalDate.now())) {
+            return List.of();
+        }
+
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd   = date.plusDays(1).atStartOfDay();
+
+        List<LocalDateTime> booked = appointmentsRepo.findScheduledTimesForDoctorOnDay(
+                doctorId, dayStart, dayEnd, AppointmentStatus.SCHEDULED
+        );
+
+        Set<LocalTime> bookedTimes = new HashSet<>();
+        for (LocalDateTime dt : booked) {
+            bookedTimes.add(dt.toLocalTime());
+        }
+
+        List<String> available = new ArrayList<>();
+        LocalTime cursor = OPEN_TIME;
+        while (cursor.isBefore(CLOSE_TIME)) {
+            if (!bookedTimes.contains(cursor)) {
+                available.add(cursor.format(HH_MM));
+            }
+            cursor = cursor.plusMinutes(SLOT_MINUTES);
+        }
+        return available;
+    }
+}package com.medicore.hospitalmangement.services;
+
+import com.medicore.hospitalmangement.dtos.patients.PatientCreateDTO;
+import com.medicore.hospitalmangement.dtos.patients.PatientResponseDTO;
+import com.medicore.hospitalmangement.dtos.patients.PatientUpdateDTO;
+import com.medicore.hospitalmangement.entities.PatientEntity;
+import com.medicore.hospitalmangement.entities.Role;
+import com.medicore.hospitalmangement.entities.UserEntity;
+import com.medicore.hospitalmangement.exceptions.DuplicateResourceException;
+import com.medicore.hospitalmangement.exceptions.ResourceNotFoundException;
+import com.medicore.hospitalmangement.mappers.PatientMapper;
+import com.medicore.hospitalmangement.repos.PatientsRepo;
+import com.medicore.hospitalmangement.repos.UsersRepo;   // adjust to your user repo name
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@Transactional(readOnly = true)   // default for reads; write methods override below
+public class PatientsService {
+
+    private final PatientsRepo repo;
+    private final UsersRepo usersRepo;
+    private final PatientMapper mapper;
+    private final PasswordEncoder passwordEncoder;
+
+    public PatientsService(PatientsRepo repo, UsersRepo usersRepo,
+                           PatientMapper mapper, PasswordEncoder passwordEncoder) {
+        this.repo = repo;
+        this.usersRepo = usersRepo;
+        this.mapper = mapper;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    // ---------- Read ----------
+
+    public List<PatientResponseDTO> getAllPatients() {
+        return repo.findAll().stream().map(mapper::toResponseDTO).toList();
+    }
+
+    public PatientResponseDTO getPatientById(String id) {
+        return mapper.toResponseDTO(findOrThrow(id));
+    }
+
+    /** For GET /api/patients/me: the patient is derived from the logged-in email. */
+    public PatientResponseDTO getMyProfile(String email) {
+        PatientEntity patient = repo.findByUserEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile for " + email));
+        return mapper.toResponseDTO(patient);
+    }
+
+    // ---------- Create (self-registration) ----------
+
+    @Transactional
+    public PatientResponseDTO createPatient(PatientCreateDTO dto) {
+        if (usersRepo.existsByEmail(dto.email())) {
+            throw new DuplicateResourceException("Email address already exists.");
+        }
+
+        UserEntity user = UserEntity.builder()
+                .email(dto.email())
+                .displayName(dto.fullName())                       // remove if your entity has no such field
+                .password(passwordEncoder.encode(dto.password()))  // always hash
+                .role(Role.PATIENT)                                // fixed server-side, never from the client
+                .enabled(true)
+                .build();
+        usersRepo.save(user);
+
+        PatientEntity patient = mapper.toEntity(dto);
+        patient.setUser(user);
+        return mapper.toResponseDTO(repo.save(patient));
+    }
+
+    // ---------- Update ----------
+
+    @Transactional
+    public PatientResponseDTO updatePatient(String id, PatientUpdateDTO dto) {
+        PatientEntity patient = findOrThrow(id);
+        mapper.updateEntity(dto, patient);           // in-place; dirty checking issues the UPDATE
+        return mapper.toResponseDTO(patient);
+    }
+
+    @Transactional
+    public PatientResponseDTO updateMyProfile(String email, PatientUpdateDTO dto) {
+        PatientEntity patient = repo.findByUserEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile for " + email));
+        mapper.updateEntity(dto, patient);
+        return mapper.toResponseDTO(patient);
+    }
+
+    // ---------- Delete ----------
+
+    @Transactional
+    public void deletePatientById(String id) {
+        PatientEntity patient = findOrThrow(id);
+        UserEntity user = patient.getUser();
+        repo.delete(patient);        // profile first (it holds the FK)
+        usersRepo.delete(user);      // then the login account
+    }
+
+    // ---------- Helper ----------
+
+    private PatientEntity findOrThrow(String id) {
+        return repo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient", id));
+    }
+}package com.medicore.hospitalmangement.services;
+
+import com.medicore.hospitalmangement.dtos.doctors.*;
+import com.medicore.hospitalmangement.entities.DoctorEntity;
+import com.medicore.hospitalmangement.entities.Role;      // adjust to where your enum lives
+import com.medicore.hospitalmangement.entities.UserEntity;
+import com.medicore.hospitalmangement.exceptions.DuplicateResourceException;
+import com.medicore.hospitalmangement.exceptions.ResourceNotFoundException;
+import com.medicore.hospitalmangement.mappers.DoctorMapper;
+import com.medicore.hospitalmangement.repos.DoctorsRepo;
+import com.medicore.hospitalmangement.repos.UsersRepo;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@Transactional(readOnly = true)
+public class DoctorsService {
+
+    private final DoctorsRepo repo;
+    private final UsersRepo usersRepo;
+    private final DoctorMapper mapper;
+    private final PasswordEncoder passwordEncoder;
+
+    public DoctorsService(DoctorsRepo repo, UsersRepo usersRepo,
+                          DoctorMapper mapper, PasswordEncoder passwordEncoder) {
+        this.repo = repo;
+        this.usersRepo = usersRepo;
+        this.mapper = mapper;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    // ---------- Read ----------
+
+    /** Lists all doctors, or filters by specialization when it is provided. */
+    public List<DoctorResponseDTO> getDoctors(String specialization) {
+        List<DoctorEntity> doctors = (specialization == null || specialization.isBlank())
+                ? repo.findAllWithUser()
+                : repo.searchBySpecialization(specialization.trim());
+        return doctors.stream().map(mapper::toResponseDTO).toList();
+    }
+
+    public DoctorResponseDTO getDoctorById(String id) {
+        return mapper.toResponseDTO(findOrThrow(id));
+    }
+
+    public DoctorResponseDTO getMyProfile(String email) {
+        return mapper.toResponseDTO(findByEmailOrThrow(email));
+    }
+
+    // ---------- Create (admin) ----------
+
+    @Transactional
+    public DoctorResponseDTO createDoctor(DoctorCreateDTO dto) {
+        if (usersRepo.existsByEmail(dto.email())) {
+            throw new DuplicateResourceException("Email address already exists.");
+        }
+
+        UserEntity user = UserEntity.builder()
+                .email(dto.email())
+                .displayName(dto.fullName())                       // remove if your entity has no such field
+                .password(passwordEncoder.encode(dto.password()))
+                .role(Role.DOCTOR)                                 // fixed server-side
+                .enabled(true)
+                .build();
+        usersRepo.save(user);
+
+        DoctorEntity doctor = mapper.toEntity(dto);
+        doctor.setUser(user);
+        return mapper.toResponseDTO(repo.save(doctor));
+    }
+
+    // ---------- Update ----------
+
+    @Transactional
+    public DoctorResponseDTO updateDoctor(String id, DoctorUpdateDTO dto) {
+        DoctorEntity doctor = findOrThrow(id);
+        mapper.updateEntity(dto, doctor);   // dirty checking issues the UPDATE
+        return mapper.toResponseDTO(doctor);
+    }
+
+    @Transactional
+    public DoctorResponseDTO updateMyProfile(String email, DoctorUpdateDTO dto) {
+        DoctorEntity doctor = findByEmailOrThrow(email);
+        mapper.updateEntity(dto, doctor);
+        return mapper.toResponseDTO(doctor);
+    }
+
+    // ---------- Delete (admin) ----------
+
+    @Transactional
+    public void deleteDoctor(String id) {
+        DoctorEntity doctor = findOrThrow(id);
+        UserEntity user = doctor.getUser();
+        // TODO: once appointments exist, throw a 409 if this doctor has future SCHEDULED ones
+        repo.delete(doctor);       // profile first (holds the FK)
+        usersRepo.delete(user);    // then the login account
+    }
+
+    // ---------- Helpers ----------
+
+    private DoctorEntity findOrThrow(String id) {
+        return repo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", id));
+    }
+
+    private DoctorEntity findByEmailOrThrow(String email) {
+        return repo.findByUserEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor profile for " + email));
+    }
+}package com.medicore.hospitalmangement.services;
+
+import com.medicore.hospitalmangement.dtos.users.UserCreateDTO;
+import com.medicore.hospitalmangement.dtos.users.UserResponseDTO;
+import com.medicore.hospitalmangement.dtos.users.UserUpdateDTO;
+import com.medicore.hospitalmangement.entities.UserEntity;
+import com.medicore.hospitalmangement.exceptions.DuplicateResourceException;
+import com.medicore.hospitalmangement.exceptions.ResourceNotFoundException;
+import com.medicore.hospitalmangement.mappers.UserMapper;
+import com.medicore.hospitalmangement.repos.UsersRepo;
+import jakarta.transaction.Transactional;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class UsersService {
+
+    UsersRepo repo;
+    UserMapper mapper;
+    private final PasswordEncoder passwordEncoder;
+
+    public UsersService(UsersRepo repo, UserMapper mapper, PasswordEncoder passwordEncoder) {
+        this.repo = repo;
+        this.mapper = mapper;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    public List<UserResponseDTO> getUsers() {
+        //        System.out.println(users);
+        return repo.findAll().stream().map(mapper::toResponseDTO).toList();
+    }
+
+    public UserResponseDTO getUserById(String id) {
+        return mapper.toResponseDTO(findOrThrow(id));
+    }
+
+    @Transactional
+    public UserResponseDTO createUser(UserCreateDTO dto) {
+        if (repo.existsByEmail(dto.email())) {
+            throw new DuplicateResourceException("Email address already exists.");
+        }
+        UserEntity user = mapper.toEntity(dto);
+        user.setPassword(passwordEncoder.encode(dto.password()));   // always hash
+        return mapper.toResponseDTO(repo.save(user));
+    }
+
+    @Transactional
+    public UserResponseDTO updateUser(String id, UserUpdateDTO dto) {
+        UserEntity user = repo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id));
+
+        if (dto.email() != null && !dto.email().equals(user.getEmail())) {
+            if (repo.existsByEmail(dto.email())) {
+                throw new DuplicateResourceException("Email address already exists.");
+            }
+            user.setEmail(dto.email());
+        }
+
+        if (dto.password() != null && !dto.password().isBlank()) {
+            user.setPassword(passwordEncoder.encode(dto.password()));
+        }
+
+        mapper.updateEntity(dto, user);   // displayName, enabled, etc.
+        return mapper.toResponseDTO(user);
+    }
+
+    @Transactional
+    public void deleteUser(String id) {
+        repo.delete(findOrThrow(id));
+    }
+
+    public boolean existsByEmail(String email) {
+        return repo.existsByEmail(email);
+    }
+
+    private UserEntity findOrThrow(String id) {
+        return repo.findById(id).orElseThrow(() -> new ResourceNotFoundException("User", id));
+    }}
