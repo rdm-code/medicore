@@ -9,8 +9,8 @@ export const userResponseSchema = z.object({
   displayName: z.string().nullable(),
   role: roleSchema,
   enabled: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
 });
 export type UserResponse = z.infer<typeof userResponseSchema>;
 

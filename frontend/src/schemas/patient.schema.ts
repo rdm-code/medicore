@@ -10,7 +10,7 @@ export const patientResponseSchema = z.object({
   age: z.number().int().min(0).max(130).nullable(),
   gender: z.string().nullable(),
   phone: z.string().nullable(),
-  updatedAt: z.string(),
+  updatedAt: z.string().nullable(),
 });
 export type PatientResponse = z.infer<typeof patientResponseSchema>;
 

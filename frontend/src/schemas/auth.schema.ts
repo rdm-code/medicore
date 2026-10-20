@@ -3,14 +3,14 @@ import { roleSchema } from "./user.schema";
 
 // Mirrors LoginRequestDTO
 export const loginSchema = z.object({
-  email: z.string().email("Email must be valid"),
+  email: z.email("Email must be valid"),
   password: z.string().min(1, "Password is required"),
 });
 export type LoginFormValues = z.infer<typeof loginSchema>;
 
 /** POST /api/auth/register uses PatientCreateDTO (patient self-registration) */
 export const registerSchema = z.object({
-  email: z.string().email("Email must be valid"),
+  email: z.email("Email must be valid"),
   password: z
     .string()
     .min(6, "Password must be 6 to 20 characters")
@@ -39,7 +39,7 @@ export type RegisterFormValues = z.infer<typeof registerSchema>;
 
 /** GET /api/auth/me */
 export const currentUserSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   role: roleSchema,
   profile: z.unknown().nullable().optional(),
 });
