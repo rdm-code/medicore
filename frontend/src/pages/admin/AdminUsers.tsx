@@ -8,11 +8,12 @@ import ErrorState from "../../components/ErrorState";
 import { useUsers } from "../../hooks/useUsers";
 import { useZodForm } from "../../hooks/useZodForm";
 import { errorMessage } from "../../lib/fetcher";
-import type {Role, UserResponseDTO } from "../../types";
+import type {Role } from "../../types";
 import {
   userCreateSchema,
   userUpdateSchema,
   type UserCreateFormValues,
+  type UserResponse,
   type UserUpdateFormValues,
 } from "../../schemas";
 
@@ -38,7 +39,7 @@ export default function AdminUsers() {
   } = useUsers();
 
   const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
-  const [editing, setEditing] = useState<UserResponseDTO| null>(null);
+  const [editing, setEditing] = useState<UserResponse| null>(null);
   const [serverError, setServerError] = useState("");
 
   const createForm = useZodForm<UserCreateFormValues>({
@@ -83,10 +84,10 @@ export default function AdminUsers() {
     setServerError("");
   };
 
-  const openEdit = (user: UserResponseDTO) => {
+  const openEdit = (user: UserResponse) => {
     setEditing(user);
     editForm.reset({
-      displayName: user.displayName,
+      displayName: user.displayName ?? '',
       email: user.email,
       role: user.role,
     });
@@ -100,7 +101,7 @@ export default function AdminUsers() {
     setServerError("");
   };
 
-  const handleToggle = async (user: UserResponseDTO) => {
+  const handleToggle = async (user: UserResponse) => {
     try {
       await setEnabled(user.id, !user.enabled);
     } catch (e) {
@@ -109,7 +110,7 @@ export default function AdminUsers() {
     }
   };
 
-  const handleDelete = async (user: UserResponseDTO) => {
+  const handleDelete = async (user: UserResponse) => {
     if (!window.confirm(`Delete user ${user.email}?`)) return;
     try {
       await remove(user.id);
@@ -124,7 +125,7 @@ export default function AdminUsers() {
       users.filter((u) => {
         const matchesSearch =
           u.email.toLowerCase().includes(search.toLowerCase()) ||
-          u.displayName.toLowerCase().includes(search.toLowerCase());
+          u.displayName?.toLowerCase().includes(search.toLowerCase());
         const matchesRole = !roleFilter || u.role === roleFilter;
         return matchesSearch && matchesRole;
       }),

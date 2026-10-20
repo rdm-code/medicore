@@ -9,13 +9,12 @@ import { usePatients } from '../../hooks/usePatients';
 import { useZodForm } from '../../hooks/useZodForm';
 import { errorMessage } from '../../lib/fetcher';
 import { formatDate } from '../../lib/datetime';
-import type { PatientResponseDTO } from '../../types';
-import { patientUpdateSchema, type PatientUpdateFormValues } from '../../schemas';
+import { patientUpdateSchema, type PatientResponse, type PatientUpdateFormValues } from '../../schemas';
 
 export default function AdminPatients() {
   const [search, setSearch] = useState('');
   const { patients, isLoading, error, update, remove, invalidate } = usePatients();
-  const [editing, setEditing] = useState<PatientResponseDTO | null>(null);
+  const [editing, setEditing] = useState<PatientResponse | null>(null);
   const [serverError, setServerError] = useState('');
 
   const form = useZodForm<PatientUpdateFormValues>({
@@ -39,18 +38,18 @@ export default function AdminPatients() {
     },
   });
 
-  const openEdit = (p: PatientResponseDTO) => {
+  const openEdit = (p: PatientResponse) => {
     setEditing(p);
     form.reset({
       fullName: p.fullName,
-      phone: p.phone,
+      phone: p.phone ?? '',
       age: p.age ?? undefined,
       gender: (p.gender ?? 'MALE').toUpperCase() as 'MALE' | 'FEMALE' | 'OTHER',
     });
     setServerError('');
   };
 
-  const handleDelete = async (p: PatientResponseDTO) => {
+  const handleDelete = async (p: PatientResponse) => {
     if (!window.confirm(`Delete patient ${p.fullName}?`)) return;
     try {
       await remove(p.id);

@@ -1,42 +1,4 @@
 package com.medicore.hospitalmangement.config;
-//package com.medicore.hospitalmangement.config;
-//
-//import org.springframework.context.annotation.Bean;
-//import org.springframework.context.annotation.Configuration;
-//import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-//import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-//import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-//import org.springframework.security.crypto.password.PasswordEncoder;
-//import org.springframework.security.web.SecurityFilterChain;
-//
-//import static org.springframework.security.config.Customizer.withDefaults;
-//
-//@Configuration
-//public class SecurityConfig {
-//
-//    @Bean
-//    public SecurityFilterChain securityFilterChain(
-//            HttpSecurity http) throws Exception {
-//
-//        http
-//                // Allow H2 console to be displayed in a frame
-//                .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
-//                // Disable CSRF completely so API testing tools (Postman, curl) and H2 work without tokens
-//                .csrf(AbstractHttpConfigurer::disable)
-//                // Permit all incoming HTTP requests
-//                .authorizeHttpRequests(auth -> auth
-//                        .anyRequest().permitAll()
-//                );
-//
-//        return http.build();
-//    }
-//
-//    @Bean
-//    public PasswordEncoder passwordEncoder() {
-//        return new BCryptPasswordEncoder();
-//    }
-//}
-
 
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -49,6 +11,7 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -70,7 +33,7 @@ public class SecurityConfig {
 
     private final ObjectMapper mapper;
 
-    public SecurityConfig(ObjectMapper mapper) {   // Spring Boot's configured mapper
+    public SecurityConfig(ObjectMapper mapper) {
         this.mapper = mapper;
     }
 
@@ -78,11 +41,13 @@ public class SecurityConfig {
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(Customizer.withDefaults())
-                .csrf(AbstractHttpConfigurer::disable)   // fine for Postman; enable for a browser front-end
+                .csrf(AbstractHttpConfigurer::disable)
                 .securityContext(sc -> sc.requireExplicitSave(true))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/register",
-                                "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                                "/swagger-ui/**", "/v3/api-docs/**",
+                                "/actuator/health", "/actuator/health/**").permitAll()   // added for Docker healthcheck
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
 
@@ -93,7 +58,7 @@ public class SecurityConfig {
                                 res.setStatus(HttpStatus.NO_CONTENT.value()))
                         .deleteCookies("JSESSIONID"))
 
-                .httpBasic(Customizer.withDefaults())   // optional: curl/Postman Basic auth
+                .httpBasic(Customizer.withDefaults())
 
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) ->
@@ -118,16 +83,27 @@ public class SecurityConfig {
 
     @Bean
     SecurityContextRepository securityContextRepository() {
-        return new HttpSessionSecurityContextRepository();   // stores login in the HttpSession
+        return new HttpSessionSecurityContextRepository();
     }
 
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         var c = new CorsConfiguration();
-        c.setAllowedOrigins(List.of("http://localhost:5173")); //List of allowed origins, this is to allow reactApp be able to access the server;
+
+        // Allow both dev (Vite :5173) and Docker (Nginx :80) origins.
+        // Add your production hostname here when you deploy.
+        c.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://localhost",          // Nginx frontend in Docker on port 80
+                "http://127.0.0.1"
+        ));
+
         c.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         c.setAllowCredentials(true);
         c.setAllowedHeaders(List.of("*"));
+        c.setExposedHeaders(List.of("Set-Cookie"));
+
         var s = new UrlBasedCorsConfigurationSource();
         s.registerCorsConfiguration("/**", c);
         return s;

@@ -12,9 +12,9 @@ import { errorMessage } from "../../lib/fetcher";
 import {
   doctorCreateSchema,
   type DoctorCreateFormValues,
+  type DoctorResponse,
   type DoctorUpdateFormValues,
 } from "../../schemas";
-import type { DoctorResponseDTO } from "../../types";
 
 const specializationOptions = [
   "Cardiology",
@@ -43,7 +43,7 @@ export default function AdminDoctors() {
   const { doctors, isLoading, error, create, update, remove, invalidate } =
     useDoctors();
   const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
-  const [editing, setEditing] = useState<DoctorResponseDTO | null>(null);
+  const [editing, setEditing] = useState<DoctorResponse | null>(null);
   const [serverError, setServerError] = useState("");
 
   const createForm = useZodForm<DoctorCreateFormValues>({
@@ -82,7 +82,7 @@ export default function AdminDoctors() {
     setServerError("");
   };
 
-  const openEdit = (doc: DoctorResponseDTO) => {
+  const openEdit = (doc: DoctorResponse) => {
     setEditing(doc);
     editForm.reset({
       fullName: doc.fullName,
@@ -99,7 +99,7 @@ export default function AdminDoctors() {
     setServerError("");
   };
 
-  const handleDelete = async (doc: DoctorResponseDTO) => {
+  const handleDelete = async (doc: DoctorResponse) => {
     if (!window.confirm(`Delete doctor ${doc.fullName}?`)) return;
     try {
       await remove(doc.id);

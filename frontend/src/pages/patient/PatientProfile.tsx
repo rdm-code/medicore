@@ -29,7 +29,7 @@ export default function PatientProfile() {
     if (patient) {
       form.reset({
         fullName: patient.fullName,
-        phone: patient.phone,
+        phone: patient.phone ?? '',
         age: patient.age ?? undefined,
         gender: patient.gender ?? '',
       });

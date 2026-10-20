@@ -1,12 +1,17 @@
-import { z } from "zod";
+// src/schemas/env.schema.ts
+import { z } from 'zod';
 
 export const envSchema = z.object({
-  VITE_API_URL: z.url().default("http://localhost:8080"),
+  // Empty string = use relative URLs (same-origin, Nginx proxies /api/*)
+  // Non-empty    = must be a valid URL (used in dev to hit :8080 directly)
+  VITE_API_URL: z
+    .string()
+    .refine(
+      (v) => v === '' || /^https?:\/\/.+/.test(v),
+      'VITE_API_URL must be a valid URL or empty',
+    ),
 });
 
-export type Env = z.infer<typeof envSchema>;
-
-// Validate once at module load
 export const env = envSchema.parse({
-  VITE_API_URL: import.meta.env.VITE_API_URL,
+  VITE_API_URL: import.meta.env.VITE_API_URL ?? '',
 });
