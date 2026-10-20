@@ -77,4 +77,49 @@ flowchart LR
     B --> C[Service layer<br/>@Service @Transactional]
     C --> D[Repository layer<br/>JpaRepository + custom @Query]
     C -.-> M[MapStruct mappers<br/>DTO ⇄ Entity]
-    D -->|JDBC| E[(PostgreSQL<br/>hospital_management)]
+    D -->|JDBC| E[(PostgreSQL<br/>hospital_management)]```
+
+erDiagram
+    USER ||--o| PATIENT : "profile"
+    USER ||--o| DOCTOR  : "profile"
+    PATIENT ||--o{ APPOINTMENT : "books"
+    DOCTOR  ||--o{ APPOINTMENT : "attends"
+
+    USER {
+        string  id PK
+        string  email  "unique, not null"
+        string  password "BCrypt"
+        string  displayName
+        enum    role   "ADMIN|DOCTOR|PATIENT"
+        boolean enabled "default true"
+        Instant createdAt
+        Instant updatedAt
+    }
+    PATIENT {
+        string  id PK
+        string  userId FK "unique, not null"
+        string  fullName
+        int     age
+        string  gender
+        string  phone
+        Instant updatedAt
+    }
+    DOCTOR {
+        string  id PK
+        string  userId FK "unique, not null"
+        string  fullName
+        string  specialization
+        string  phone
+        Instant updatedAt
+    }
+    APPOINTMENT {
+        string  id PK
+        string  patientId FK
+        string  doctorId  FK
+        datetime appointmentTime
+        enum     status "SCHEDULED|COMPLETED|CANCELLED"
+        string   reason  "max 500"
+        string   notes   "max 1000"
+        Instant  createdAt
+        Instant  updatedAt
+    }
