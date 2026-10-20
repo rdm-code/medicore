@@ -37,8 +37,18 @@ MediCore is a hospital management system with a Spring Boot REST API backend and
 
 ## Running Locally
 
+## Clone the repo
 ```bash
+git clone https://github.com/rdm-code/medicore.git
+```
+## After cloning
+
+```bash
+
+cd medicore
+
 # Backend
+cd hospitalmangement
 ./mvnw spring-boot:run
 
 # Frontend (in a separate terminal)
