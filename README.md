@@ -15,7 +15,7 @@ MediCore is a hospital management system with a Spring Boot REST API backend and
 - **Mapping:** MapStruct 1.6.3 + Lombok
 - **Database:** PostgreSQL (H2 is also on the classpath for local runs)
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind, SWR for data fetching, Zod for validation
-- **Docs:** springdoc-openapi (Swagger UI)
+#- **Docs:** springdoc-openapi (Swagger UI)
 
 ## Prerequisites
 
@@ -56,9 +56,11 @@ cd frontend
 npm install
 npm run dev
 ```
+## Deploying in docker
 
-> The paths and commands above are the standard defaults; adjust them if your project layout differs.
-
+```bash
+sudo docker compose up --build
+```
 ---
 
 # API Documentation

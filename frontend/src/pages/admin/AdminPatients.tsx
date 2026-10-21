@@ -18,8 +18,9 @@ export default function AdminPatients() {
   const [serverError, setServerError] = useState('');
 
   const form = useZodForm<PatientUpdateFormValues>({
-    initialValues: { fullName: '', phone: '', age: undefined, gender: ""
-     },
+    initialValues: {
+      fullName: '', phone: '', age: undefined, gender: ""
+    },
     schema: patientUpdateSchema,
     onSubmit: async (values) => {
       setServerError('');
@@ -108,7 +109,7 @@ export default function AdminPatients() {
                     <td className="px-4 py-3 text-slate-600">{p.age ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{p.gender ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{p.phone}</td>
-                    <td className="px-4 py-3 text-slate-500">{formatDate(p.updatedAt)}</td>
+                    <td className="px-4 py-3 text-slate-500">{formatDate(p.updatedAt ?? "")}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex gap-1">
                         <button onClick={() => openEdit(p)}
@@ -169,15 +170,15 @@ export default function AdminPatients() {
               className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none text-sm" />
           </FormField>
           <FormField label="Gender" error={form.errors.gender} touched={form.touched.gender}>
-  <select name="gender" value={form.values.gender}
-    onChange={form.handleChange} onBlur={() => form.setTouched('gender')}
-    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none text-sm bg-white">
-    <option value="">Select...</option>
-    <option value="MALE">Male</option>
-    <option value="FEMALE">Female</option>
-    <option value="OTHER">Other</option>
-  </select>
-</FormField>
+            <select name="gender" value={form.values.gender}
+              onChange={form.handleChange} onBlur={() => form.setTouched('gender')}
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none text-sm bg-white">
+              <option value="">Select...</option>
+              <option value="MALE">Male</option>
+              <option value="FEMALE">Female</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </FormField>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setEditing(null)}
               className="flex-1 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors">
