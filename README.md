@@ -261,6 +261,6 @@ class node_repos,node_database toneRose
 class node_users toneIndigo
 ```
 
-[![Architecture diagram of rdm-code/medicore](https://gitdiagram.com/rdm-code/medicore/diagram.png)](https://gitdiagram.com/rdm-code/medicore?utm_source=readme&utm_medium=picture)
+<!-- [![Architecture diagram of rdm-code/medicore](https://gitdiagram.com/rdm-code/medicore/diagram.png)](https://gitdiagram.com/rdm-code/medicore?utm_source=readme&utm_medium=picture) -->
 
 <!-- [![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/rdm-code/medicore?utm_source=readme&utm_medium=badge) -->
