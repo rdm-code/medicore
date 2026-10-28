@@ -171,4 +171,6 @@ erDiagram
 
 ## Architecture Design
 
-[![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/rdm-code/medicore?utm_source=readme&utm_medium=badge)
+[![Architecture diagram of rdm-code/medicore](https://gitdiagram.com/rdm-code/medicore/diagram.png)](https://gitdiagram.com/rdm-code/medicore?utm_source=readme&utm_medium=picture)
+
+<!-- [![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/rdm-code/medicore?utm_source=readme&utm_medium=badge) -->
