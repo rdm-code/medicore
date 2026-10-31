@@ -35,5 +35,5 @@ build/
 ./data/
 ./data/**
 ./data/*.db
-./data/hospitalmanagement.mv.db
-./data/hospitalmanagement.trace.db
+data/hospitalmanagement.mv.db
+data/hospitalmanagement.trace.db
