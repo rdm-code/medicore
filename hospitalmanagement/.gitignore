@@ -31,6 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
 ./data/
 ./data/**
 ./data/*.db
+hospitalmanagement/data/hospitalmanagement.mv.db
+hospitalmanagement/data/hospitalmanagement.trace.db
