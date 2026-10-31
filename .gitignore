@@ -2,6 +2,6 @@
 .env.local
 *.env
 !.env.example
-.idea/
+.idea
 .idea/*
 .idea/**
