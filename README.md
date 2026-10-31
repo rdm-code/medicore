@@ -66,7 +66,7 @@ npm run dev        # http://localhost:5173
 ### First login (admin account)
 
 Self-registration only creates **PATIENT** accounts, so on first start the backend creates one
-**ADMIN** if none exists. Defaults: `admin@medicore.local` / `Admin@123`. Override with the
+**ADMIN** if none exists. Defaults: `admin@medicore.com` / `Admin@123`. Override with the
 environment variables `ADMIN_EMAIL` and `ADMIN_PASSWORD`, and **change the default before deploying**.
 The admin can then create doctors (`POST /api/admin/doctors`) and other users.
 
@@ -77,7 +77,7 @@ With the backend running, open <http://localhost:8080/swagger-ui.html>. Or with 
 ```bash
 # log in and keep the session cookie
 curl -c cookies.txt -H "Content-Type: application/json" \
-     -d '{"email":"admin@medicore.local","password":"Admin@123"}' \
+     -d '{"email":"admin@medicore.com","password":"Admin@123"}' \
      http://localhost:8080/api/auth/login
 
 # list doctors using that session
