@@ -32,7 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 
-./data/
+/data/
 ./data/**
 ./data/*.db
 data/hospitalmanagement.mv.db
