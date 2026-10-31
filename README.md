@@ -48,7 +48,7 @@ git clone https://github.com/rdm-code/medicore.git
 cd medicore
 
 # Backend
-cd hospitalmangement
+cd hospitalmanagement
 ./mvnw spring-boot:run
 
 # Frontend (in a separate terminal)
@@ -236,16 +236,16 @@ click node_clientapi "https://github.com/rdm-code/medicore/blob/main/frontend/sr
 click node_appointmentsui "https://github.com/rdm-code/medicore/blob/main/frontend/src/pages/patient/BookAppointment.tsx"
 click node_adminui "https://github.com/rdm-code/medicore/blob/main/frontend/src/pages/admin/AdminUsers.tsx"
 click node_doctorui "https://github.com/rdm-code/medicore/blob/main/frontend/src/pages/doctor/DoctorAppointments.tsx"
-click node_authcontroller "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/controllers/AuthController.java"
-click node_appointmentscontroller "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/controllers/AppointmentsController.java"
-click node_othercontrollers "https://github.com/rdm-code/medicore/tree/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/controllers"
-click node_authservice "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/services/PatientsService.java"
-click node_appointmentservice "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/services/AppointmentsService.java"
-click node_doctorservice "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/services/DoctorsService.java"
-click node_patientservice "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/services/PatientsService.java"
-click node_userservice "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/services/UsersService.java"
-click node_slots "https://github.com/rdm-code/medicore/blob/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/services/SlotsService.java"
-click node_repos "https://github.com/rdm-code/medicore/tree/main/hospitalmangement/src/main/java/com/medicore/hospitalmangement/repos"
+click node_authcontroller "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/controllers/AuthController.java"
+click node_appointmentscontroller "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/controllers/AppointmentsController.java"
+click node_othercontrollers "https://github.com/rdm-code/medicore/tree/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/controllers"
+click node_authservice "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/services/PatientsService.java"
+click node_appointmentservice "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/services/AppointmentsService.java"
+click node_doctorservice "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/services/DoctorsService.java"
+click node_patientservice "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/services/PatientsService.java"
+click node_userservice "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/services/UsersService.java"
+click node_slots "https://github.com/rdm-code/medicore/blob/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/services/SlotsService.java"
+click node_repos "https://github.com/rdm-code/medicore/tree/main/hospitalmanagement/src/main/java/com/medicore/hospitalmanagement/repos"
 
 classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
 classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
