@@ -29,7 +29,7 @@ services:
       DB_URL: jdbc:postgresql://db:5432/${DB_NAME}
       DB_USERNAME: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@medicore.local}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@medicore.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
     expose:
       - "8080"
