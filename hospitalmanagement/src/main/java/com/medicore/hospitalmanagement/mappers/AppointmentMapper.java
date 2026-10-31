@@ -1,7 +1,6 @@
 package com.medicore.hospitalmanagement.mappers;
 
-import com.medicore.hospitalmanagement.dtos.appointments.AppointmentCreateDTO;
-import com.medicore.hospitalmanagement.dtos.appointments.AppointmentResponseDTO;
+import com.medicore.hospitalmanagement.dtos.appointments.*;
 import com.medicore.hospitalmanagement.entities.AppointmentEntity;
 import org.mapstruct.*;
 
@@ -14,6 +13,7 @@ public interface AppointmentMapper {
     @Mapping(target = "doctor", ignore = true)
     @Mapping(target = "status", ignore = true)      // always starts as SCHEDULED
     @Mapping(target = "notes", ignore = true)       // doctors only
+    @Mapping(target = "activeSlotKey", ignore = true)   // maintained by the entity itself
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     AppointmentEntity toEntity(AppointmentCreateDTO dto);

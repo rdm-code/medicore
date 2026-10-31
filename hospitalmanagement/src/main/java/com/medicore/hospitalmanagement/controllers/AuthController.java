@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.Objects;
 
+/** Public authentication endpoints. Login is session based: a successful login sets the JSESSIONID cookie. */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -36,11 +37,13 @@ public class AuthController {
         this.securityContextRepository = securityContextRepository;
     }
 
+    /** Self-registration for patients. Responds 201; 400 on invalid input, 409 if the email is already used. */
     @PostMapping("/register")
     public ResponseEntity<PatientResponseDTO> register(@Valid @RequestBody PatientCreateDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(patientsService.createPatient(dto));
     }
 
+    /** Authenticates with email + password and starts a session. Returns email and role; 401 on bad credentials, 403 if the account is disabled. */
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(
             @Valid @RequestBody LoginRequestDTO dto,
@@ -60,6 +63,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("email", auth.getName(), "role", role));
     }
 
+    /** Returns the email and role of the currently logged-in user (401 when not logged in). */
     @GetMapping("/me")
     public ResponseEntity<Map<String, String>> me(Authentication auth) {
         String role = Objects.requireNonNull(auth.getAuthorities().iterator().next()

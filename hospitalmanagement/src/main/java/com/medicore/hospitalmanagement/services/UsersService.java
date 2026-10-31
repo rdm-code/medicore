@@ -8,17 +8,17 @@ import com.medicore.hospitalmanagement.exceptions.DuplicateResourceException;
 import com.medicore.hospitalmanagement.exceptions.ResourceNotFoundException;
 import com.medicore.hospitalmanagement.mappers.UserMapper;
 import com.medicore.hospitalmanagement.repos.UsersRepo;
-import jakarta.transaction.Transactional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 public class UsersService {
 
-    UsersRepo repo;
-    UserMapper mapper;
+    private final UsersRepo repo;
+    private final UserMapper mapper;
     private final PasswordEncoder passwordEncoder;
 
     public UsersService(UsersRepo repo, UserMapper mapper, PasswordEncoder passwordEncoder) {
@@ -28,7 +28,6 @@ public class UsersService {
     }
 
     public List<UserResponseDTO> getUsers() {
-        //        System.out.println(users);
         return repo.findAll().stream().map(mapper::toResponseDTO).toList();
     }
 

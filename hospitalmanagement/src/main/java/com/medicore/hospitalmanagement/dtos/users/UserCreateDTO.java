@@ -1,5 +1,6 @@
 package com.medicore.hospitalmanagement.dtos.users;
 
+import com.medicore.hospitalmanagement.entities.Role;
 import jakarta.validation.constraints.*;
 
 public record UserCreateDTO(

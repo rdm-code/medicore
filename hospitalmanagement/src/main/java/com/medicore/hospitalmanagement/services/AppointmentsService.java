@@ -1,18 +1,5 @@
 package com.medicore.hospitalmanagement.services;
 
-import com.medicore.hospitalmanagement.dtos.appointments.AppointmentCreateDTO;
-import com.medicore.hospitalmanagement.dtos.appointments.AppointmentNotesDTO;
-import com.medicore.hospitalmanagement.dtos.appointments.AppointmentResponseDTO;
-import com.medicore.hospitalmanagement.entities.AppointmentEntity;
-import com.medicore.hospitalmanagement.entities.AppointmentStatus;
-import com.medicore.hospitalmanagement.entities.DoctorEntity;
-import com.medicore.hospitalmanagement.entities.PatientEntity;
-import com.medicore.hospitalmanagement.exceptions.InvalidStatusTransitionException;
-import com.medicore.hospitalmanagement.exceptions.ResourceNotFoundException;
-import com.medicore.hospitalmanagement.exceptions.SlotAlreadyBookedException;
-import com.medicore.hospitalmanagement.repos.AppointmentsRepo;
-import com.medicore.hospitalmanagement.repos.DoctorsRepo;
-import com.medicore.hospitalmanagement.repos.PatientsRepo;
 import com.medicore.hospitalmanagement.dtos.appointments.*;
 import com.medicore.hospitalmanagement.entities.*;
 import com.medicore.hospitalmanagement.exceptions.*;

@@ -9,7 +9,7 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.medicore</groupId>
-	<artifactId>hospitalmangement</artifactId>
+	<artifactId>hospitalmanagement</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name/>
 	<description/>

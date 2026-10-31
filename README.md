@@ -13,54 +13,99 @@ MediCore is a hospital management system with a Spring Boot REST API backend and
 - **Backend:** Java 21, Spring Boot 4.1.1 (Spring Security, Spring Data JPA, Spring Web MVC, Validation, Actuator)
 - **Build Tool:** Maven (use the included `mvnw` wrapper)
 - **Mapping:** MapStruct 1.6.3 + Lombok
-- **Database:** PostgreSQL (H2 is also on the classpath for local runs)
+- **Database:** PostgreSQL (H2 in-memory profile for quick local runs and tests)
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind, SWR for data fetching, Zod for validation
-#- **Docs:** springdoc-openapi (Swagger UI)
+- **API docs:** springdoc-openapi (Swagger UI)
+- **Deployment:** Docker Compose (PostgreSQL + backend + Nginx frontend)
 
 ## Prerequisites
 
 - JDK 21+
 - Node.js 18+ and npm (for the frontend)
-- PostgreSQL 14+ (or use the H2 fallback)
+- PostgreSQL 14+ (not needed with the H2 profile)
 - Maven (or use `./mvnw`)
-
-## Database Setup
-
-1. Create the database:
-
-   ```sql
-   CREATE DATABASE hospital_management;
-   ```
-
-2. Configure the connection (URL, username, password) in `src/main/resources/application.properties`, or override with environment variables.
-3. For a quick local run without PostgreSQL, use the H2 fallback instead.
 
 ## Running Locally
 
-## Clone the repo
 ```bash
 git clone https://github.com/rdm-code/medicore.git
+cd medicore
 ```
-## After cloning
+
+### Option A: H2 in-memory (no database install)
 
 ```bash
+cd hospitalmanagement
+./mvnw spring-boot:run -Dspring-boot.run.profiles=h2
+```
 
-cd medicore
+Data is lost on restart. The H2 console is at <http://localhost:8080/h2-console>
+(JDBC URL `jdbc:h2:mem:medicore`, user `sa`, empty password).
 
-# Backend
+### Option B: PostgreSQL
+
+1. Create the database: `CREATE DATABASE hospital_management;`
+2. Defaults in `hospitalmanagement/src/main/resources/application.properties` are
+   `localhost:5432`, user `postgres`, password `postgres`. Override with the environment
+   variables `DB_URL`, `DB_USER`, `DB_PASSWORD`.
+3. Start the backend:
+
+```bash
 cd hospitalmanagement
 ./mvnw spring-boot:run
-
-# Frontend (in a separate terminal)
-cd frontend
-npm install
-npm run dev
 ```
-## Deploying in docker
+
+### Frontend (separate terminal)
 
 ```bash
-sudo docker compose up --build
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
 ```
+
+### First login (admin account)
+
+Self-registration only creates **PATIENT** accounts, so on first start the backend creates one
+**ADMIN** if none exists. Defaults: `admin@medicore.local` / `Admin@123`. Override with the
+environment variables `ADMIN_EMAIL` and `ADMIN_PASSWORD`, and **change the default before deploying**.
+The admin can then create doctors (`POST /api/admin/doctors`) and other users.
+
+### Swagger UI and sample requests
+
+With the backend running, open <http://localhost:8080/swagger-ui.html>. Or with curl:
+
+```bash
+# log in and keep the session cookie
+curl -c cookies.txt -H "Content-Type: application/json" \
+     -d '{"email":"admin@medicore.local","password":"Admin@123"}' \
+     http://localhost:8080/api/auth/login
+
+# list doctors using that session
+curl -b cookies.txt http://localhost:8080/api/doctors
+
+# register a patient (no login needed)
+curl -H "Content-Type: application/json" \
+     -d '{"email":"asha@example.com","password":"secret1","fullName":"Asha K","age":29,"gender":"FEMALE","phone":"9876543210"}' \
+     http://localhost:8080/api/auth/register
+```
+
+### Running the tests
+
+```bash
+cd hospitalmanagement
+./mvnw test        # uses in-memory H2, no PostgreSQL needed
+```
+
+## Deploying with Docker
+
+```bash
+cp .env.example .env      # then edit the passwords
+docker compose up --build
+```
+
+The app is served at <http://localhost> (or `FRONTEND_PORT`). The backend and database are only
+reachable inside the compose network (PostgreSQL is also published on `127.0.0.1:5433`).
+
 ---
 
 # API Documentation

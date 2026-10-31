@@ -1,8 +1,6 @@
 package com.medicore.hospitalmanagement.mappers;
 
-import com.medicore.hospitalmanagement.dtos.doctors.DoctorCreateDTO;
-import com.medicore.hospitalmanagement.dtos.doctors.DoctorResponseDTO;
-import com.medicore.hospitalmanagement.dtos.doctors.DoctorUpdateDTO;
+import com.medicore.hospitalmanagement.dtos.doctors.*;
 import com.medicore.hospitalmanagement.entities.DoctorEntity;
 import org.mapstruct.*;
 

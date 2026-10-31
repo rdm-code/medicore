@@ -1,8 +1,5 @@
 package com.medicore.hospitalmanagement.services;
 
-import com.medicore.hospitalmanagement.dtos.doctors.DoctorCreateDTO;
-import com.medicore.hospitalmanagement.dtos.doctors.DoctorResponseDTO;
-import com.medicore.hospitalmanagement.dtos.doctors.DoctorUpdateDTO;
 import com.medicore.hospitalmanagement.dtos.doctors.*;
 import com.medicore.hospitalmanagement.entities.DoctorEntity;
 import com.medicore.hospitalmanagement.entities.Role;      // adjust to where your enum lives

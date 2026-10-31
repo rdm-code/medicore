@@ -11,10 +11,6 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "appointments",
-//        uniqueConstraints = @UniqueConstraint( //Used to prevent overlapping schedules for a certain doctor
-//                name = "uk_doctor_slot",
-//                columnNames = {"doctor_id", "appointment_time"}
-//        ),
         indexes = { //Used for fast reads
                 @Index(name = "idx_appt_patient", columnList = "patient_id"),
                 @Index(name = "idx_appt_doctor_time", columnList = "doctor_id, appointment_time")
@@ -53,10 +49,26 @@ public class AppointmentEntity {
     @Column(length = 1000)
     private String notes;           // doctor's notes, set by the doctor only
 
+    /**
+     * "doctorId@time" while the appointment occupies the slot (SCHEDULED or COMPLETED), NULL once CANCELLED.
+     * The UNIQUE constraint therefore blocks double booking at database level, yet a cancelled slot can be
+     * booked again (NULLs never collide). A plain unique(doctor_id, appointment_time) could not allow that.
+     */
+    @Column(name = "active_slot_key", unique = true)
+    private String activeSlotKey;
+
     @CreationTimestamp
     @Column(updatable = false)
     private Instant createdAt;
 
     @UpdateTimestamp
     private Instant updatedAt;
+
+    @PrePersist
+    @PreUpdate
+    void syncActiveSlotKey() {
+        activeSlotKey = (status == AppointmentStatus.CANCELLED)
+                ? null
+                : doctor.getId() + "@" + appointmentTime;
+    }
 }

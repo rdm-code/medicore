@@ -25,5 +25,4 @@ public interface DoctorsRepo extends JpaRepository<DoctorEntity, String> {
     @Query("select d from DoctorEntity d where d.id = :id")
     Optional<DoctorEntity> findByIdForUpdate(@Param("id") String id);
 
-//    Optional<DoctorEntity> findByIdForUpdate(@NotBlank(message = "Doctor id is required") String id);
 }
