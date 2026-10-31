@@ -46,7 +46,15 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/register",
-                                "/swagger-ui/**", "/v3/api-docs/**",
+                                // Swagger UI entry point (does not match /swagger-ui/**)
+                                "/swagger-ui.html",
+                                // Swagger UI static resources and redirect targets
+                                "/swagger-ui/**",
+                                // OpenAPI definition + the config endpoint Swagger UI fetches first
+                                "/v3/api-docs/**",
+                                "/v3/api-docs/swagger-config",
+                                // WebJars used by Swagger UI
+                                "/webjars/**",
                                 "/actuator/health", "/actuator/health/**").permitAll()   // added for Docker healthcheck
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
